@@ -207,6 +207,24 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
 </style>
 </head>
 <body>
+<div id="login-screen" style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg3)">
+  <div style="background:var(--bg);border:0.5px solid var(--bo);border-radius:var(--brl);padding:32px;width:320px;max-width:95vw;box-shadow:0 4px 24px rgba(0,0,0,.08)">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:24px">
+      <i class="ti ti-leaf" style="color:var(--blue);font-size:24px"></i>
+      <span style="font-size:18px;font-weight:700">TurfManager</span>
+    </div>
+    <div style="font-size:13px;color:var(--tx2);margin-bottom:16px">Ingresá tu contraseña para continuar</div>
+    <input type="password" id="admin-pass" placeholder="Contraseña"
+      style="width:100%;padding:12px 14px;font-size:15px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg2);color:var(--tx);font-family:inherit;margin-bottom:8px;box-sizing:border-box"
+      onkeydown="if(event.key==='Enter')checkAdminPass()">
+    <button onclick="checkAdminPass()"
+      style="width:100%;padding:13px;border-radius:var(--br);border:none;background:var(--blue);color:#fff;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">
+      Entrar
+    </button>
+    <div id="admin-pass-err" style="display:none;color:var(--red);font-size:12px;margin-top:8px;text-align:center">Contraseña incorrecta</div>
+  </div>
+</div>
+<div id="app-screen" style="display:none">
 <div class="app">
 <div class="topbar">
   <div class="logo"><i class="ti ti-leaf"></i>TurfManager</div>
@@ -2530,6 +2548,7 @@ _mutatingFns.forEach(name => {
       <div style="font-weight:600">Cancelar</div>
     </button>
   </div>
+</div></div>
 </div></div>
 </body>
 </html>
