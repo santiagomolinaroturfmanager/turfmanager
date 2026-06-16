@@ -2178,7 +2178,7 @@ async function syncToSupabase(){
     // Step 1: sync dependent tables first (delete+insert safe)
     await Promise.all([
       syncTable('tareas',tasks.map(function(t){return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',rec_id:t.recId||null,chk:t.chk||{},hs_ini:t.hsIni||null,hs_fin:t.hsFin||null};})),
-      syncTable('recurrentes',recs.map(function(r){return{id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias,hasta:r.hasta,skip:r.skip||[]};})),
+      (recs.length?syncTable('recurrentes',recs.map(function(r){return{id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias,hasta:r.hasta,skip:r.skip||[]};})):Promise.resolve()),
       syncTable('novedades',novs.map(function(n){return{id:n.id,tipo:n.tipo,fun:n.fun,txt:n.txt,fec:n.fec,leida:n.leida};})),
       syncTable('alertas',alertas.map(function(a){return{id:a.id,descripcion:a.desc||a.descripcion||'',tipo:a.tipo,dias:a.dias,ref:a.ref||'',ctx:a.ctx||'',notes:a.notes||'',fecha:a.fecha||null,estado:a.estado,leida:a.leida};})),
       syncTable('maquinas',maquinas.map(function(m){return{id:m.id,nombre:m.nombre,tipo:m.tipo,marca:m.marca||'',cat:m.cat||'general',scope:m.scope,cli_id:m.cliId||null,hs:m.hs,intervalo:m.intervalo,proximo:m.proximo,tareas:m.tareas,svc_tareas:m.svcTareas||[],hist:m.hist||[]};})),
@@ -2418,6 +2418,7 @@ _mutatingFns.forEach(name => {
   <h2>Editar funcionario</h2>
   <div class="fr"><label>Nombre completo</label><input type="text" id="efun-nombre"></div>
   <div class="fr"><label>Usuario para login</label><input type="text" id="efun-user" placeholder="Ej: jorge" autocapitalize="none"></div>
+  <div class="fr"><label>Contraseña (dejar vacío para no cambiar)</label><input type="password" id="efun-pass" placeholder="Nueva contraseña"></div>
   <div class="ma"><button onclick="CM3('mefun')">Cancelar</button><button class="bp" onclick="saveEditFun()">Guardar</button></div>
 </div></div>
 <!-- MODAL DRAG RECURRENTE -->
