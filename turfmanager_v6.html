@@ -1652,6 +1652,8 @@ function editFuncionario(id){
   _editFunId=id;
   document.getElementById('efun-nombre').value=f.nombre;
   document.getElementById('efun-user').value=f.username||f.nombre.split(' ')[0].toLowerCase();
+  var passEl=document.getElementById('efun-pass');
+  if(passEl)passEl.value='';
   document.getElementById('mefun').style.display='flex';
 }
 function saveEditFun(){
