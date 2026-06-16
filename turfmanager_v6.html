@@ -2364,8 +2364,8 @@ function withSave(fn) {
 loadStateLocal();
 render();
 rebuildSelects();
-UNB();
-updateAlrBadge();
+function init(){
+UNB();updateAlrBadge();
 if(navigator.onLine){
   loadFromSupabase().then(function(ok){
     if(ok){GRT();render();rebuildSelects();UNB();updateAlrBadge();}
@@ -2374,6 +2374,35 @@ if(navigator.onLine){
   setSBStatus(false);
 }
 UNB();
+}
+// Auth
+var ADMIN_HASH='6719e9652e0b0550c867a3a8ce833c50cebc2633583332628a9bf671bb93093c';
+async function sha256(str){
+  var buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+}
+async function checkAdminPass(){
+  var pass=document.getElementById('admin-pass').value;
+  var hash=await sha256(pass);
+  if(hash===ADMIN_HASH){
+    sessionStorage.setItem('admin_auth','1');
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app-screen').style.display='';
+    init();
+  } else {
+    document.getElementById('admin-pass-err').style.display='block';
+    document.getElementById('admin-pass').value='';
+    document.getElementById('admin-pass').focus();
+  }
+}
+// Start
+if(sessionStorage.getItem('admin_auth')==='1'){
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app-screen').style.display='';
+  init();
+} else {
+  document.getElementById('admin-pass').focus();
+}
 updateAlrBadge();
 
 // Auto-save on any data change — wrap all mutating functions
