@@ -623,7 +623,7 @@ function getPlanRows(isSint){var tarList=isSint?tiposTareaSint:tiposTarea;var ba
 // ================================================================
 function ST(t){
   cTab=t;
-  const tabs=['semana','func','nov','reg','resumen','maq','alr','rec','cfg'];
+  const tabs=['semana','nov','reg','resumen','maq','alr','rec','cfg'];
   tabs.forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.style.display=x===t?'':'none';});
   document.querySelectorAll('.nav button').forEach((b,i)=>b.className=tabs[i]===t?'on':'');
   document.getElementById('fb').style.display=t==='semana'?'flex':'none';
