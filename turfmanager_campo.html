@@ -129,6 +129,9 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg3);min-he
     <h2>Ingresá tu usuario</h2>
     <input type="text" id="login-input" placeholder="usuario" autocomplete="username" autocapitalize="none"
       style="width:100%;padding:13px 14px;font-size:16px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg2);color:var(--tx);font-family:inherit;margin-bottom:8px"
+      onkeydown="if(event.key==='Enter')document.getElementById('login-pass').focus()">
+    <input type="password" id="login-pass" placeholder="contraseña" autocomplete="current-password"
+      style="width:100%;padding:13px 14px;font-size:16px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg2);color:var(--tx);font-family:inherit;margin-bottom:8px"
       onkeydown="if(event.key==='Enter')doLogin()">
     <button onclick="doLogin()" style="width:100%;padding:14px;border-radius:var(--br);border:none;background:var(--blue);color:#fff;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">Entrar</button>
     <div id="no-funs" style="display:none;font-size:13px;color:var(--red);text-align:center;padding:10px 0;margin-top:4px"></div>
@@ -241,7 +244,6 @@ function saveCampoCache(){
   try{localStorage.setItem('campo_cache',JSON.stringify({clientes:clientes,funcionarios:funcionarios,maquinas:maquinas,tasks:tasks,recs:recs,checklists:checklists,savedAt:new Date().toISOString(),v:Date.now()}));}
   catch(e){}}
 async function loadData(){
-  // Try Supabase first
   try{
     var[cliRows,funRows,maqRows,tarRows,recRows,cfgRows]=await Promise.all([
       sbGet('clientes','select=*'),
@@ -254,22 +256,15 @@ async function loadData(){
     clientes=cliRows;
     funcionarios=funRows;
     maquinas=maqRows.map(function(m){return{id:m.id,nombre:m.nombre,tipo:m.tipo,marca:m.marca||'',cat:m.cat||'general',scope:m.scope,cliId:m.cli_id,hs:m.hs,intervalo:m.intervalo,proximo:m.proximo,tareas:m.tareas||[],svcTareas:m.svc_tareas||[],hist:m.hist||[]};});
-    tasks=tarRows.map(function(t){return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',recId:t.rec_id,chk:t.chk||{},hsIni:t.hs_ini,hsFin:t.hs_fin};});
-    recs=recRows.map(function(r){return{id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias||[],hasta:r.hasta};});
+    tasks=tarRows.map(function(t){return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',recId:t.rec_id,chk:t.chk||{},hsIni:t.hs_ini,hsFin:t.hs_fin,tsIni:t.ts_ini};});
+    recs=recRows.map(function(r){return{id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias||[],hasta:r.hasta,skip:r.skip||[]};});
     cfgRows.forEach(function(c){if(c.clave==='checklists')checklists=c.valor;});
     if(tasks.length)nxNov=Math.max.apply(null,tasks.map(function(x){return x.id;}))+1;
     sbOnline=true;
-    saveCampoCache();
     return true;
   }catch(e){
     sbOnline=false;
-    // Fall back to local cache
-    var cached=loadCampoCache();
-    if(cached){
-      console.log('Usando cache local (sin conexion)');
-      return true;
-    }
-    showMsg('Sin conexion y sin datos en cache. Conectate a internet la primera vez.');
+    showMsg('Sin conexión a internet. La app requiere conexión para funcionar.');
     return false;
   }
 }
@@ -307,11 +302,18 @@ async function doLogin(){
   }
   // Find by username or first name
   if(input==='admin'){enterApp('admin');return;}
+  if(input==='admin'){enterApp('admin');return;}
   var f=funcionarios.find(function(x){
     var uname=(x.username||x.nombre.split(' ')[0]).toLowerCase().replace(/\s+/g,'');
     return uname===input;
   });
   if(!f){errEl.textContent='Usuario no encontrado. Verificá con el admin.';errEl.style.display='block';return;}
+  // Check password if set
+  var passEl=document.getElementById('login-pass');
+  var pass=passEl?passEl.value:'';
+  if(f.password&&f.password!==''&&pass!==f.password){
+    errEl.textContent='Contraseña incorrecta.';errEl.style.display='block';return;
+  }
   enterApp(f.nombre);
 }
 
@@ -777,7 +779,7 @@ function completar(id){
 
 // ── SAVE BACK TO MAIN APP ────────────────────────────────────
 async function saveBack(){
-  if(!sbOnline){saveCampoCache();return;}
+  if(!sbOnline){return;}
   try{
     var tasksToSync=tasks.map(function(t){
       return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],
@@ -800,10 +802,8 @@ async function saveBack(){
       novToSync.length?sbUpsert('novedades',novToSync):Promise.resolve()
     ]);
     sbOnline=true;
-    saveCampoCache();
   }catch(e){
     console.warn('saveBack error',e);
-    saveCampoCache();
     throw e;
   }
 }
