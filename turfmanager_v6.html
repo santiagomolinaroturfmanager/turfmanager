@@ -563,6 +563,36 @@ let cMon=gMon(new Date()),cTab='semana';
 let cMonth=new Date().getMonth(),cYear=new Date().getFullYear();
 let cMonthR=new Date().getMonth(),cYearR=new Date().getFullYear();
 let selId=null,editingId=null,isRec=false,dragId=null;
+function getMSelVals(dropId){
+  var drop=document.getElementById(dropId);
+  if(!drop)return[];
+  return Array.from(drop.querySelectorAll('input:checked')).map(function(i){return i.value;});
+}
+function toggleMSel(wrapId){
+  var drop=document.getElementById(wrapId).querySelector('.msel-drop');
+  var isOpen=drop.classList.contains('open');
+  document.querySelectorAll('.msel-drop.open').forEach(function(d){d.classList.remove('open');});
+  if(!isOpen)drop.classList.add('open');
+}
+function applyMSel(){
+  var cliVals=getMSelVals('msel-cli-drop');
+  var funVals=getMSelVals('msel-fun-drop');
+  var estVals=getMSelVals('msel-est-drop');
+  document.getElementById('msel-cli-lbl').textContent=cliVals.length?cliVals.length+' selec.':'Todos';
+  document.getElementById('msel-fun-lbl').textContent=funVals.length?funVals.length+' selec.':'Todos';
+  document.getElementById('msel-est-lbl').textContent=estVals.length?estVals.length+' selec.':'Todos';
+  document.querySelector('#msel-cli .msel-btn').className='msel-btn'+(cliVals.length?' active':'');
+  document.querySelector('#msel-fun .msel-btn').className='msel-btn'+(funVals.length?' active':'');
+  document.querySelector('#msel-est .msel-btn').className='msel-btn'+(estVals.length?' active':'');
+  render();
+}
+function clearMSel(){
+  document.querySelectorAll('.msel-drop input[type=checkbox]').forEach(function(i){i.checked=false;});
+  applyMSel();
+}
+document.addEventListener('click',function(e){
+  if(!e.target.closest('.msel-wrap'))document.querySelectorAll('.msel-drop.open').forEach(function(d){d.classList.remove('open');});
+});
 let cFun='',cFView='dia',cFDay=fD(new Date()),cFMon=gMon(new Date());
 let openCards={},editingCliId=null;
 let dragRowIdx=null,dragOverIdx=null;
@@ -755,36 +785,6 @@ function rUC(){var cid=parseInt(document.getElementById('rcli').value)||null;var
 // ================================================================
 // CALENDAR
 // ================================================================
-function getMSelVals(dropId){
-  var drop=document.getElementById(dropId);
-  if(!drop)return[];
-  return Array.from(drop.querySelectorAll('input:checked')).map(function(i){return i.value;});
-}
-function toggleMSel(wrapId){
-  var drop=document.getElementById(wrapId).querySelector('.msel-drop');
-  var isOpen=drop.classList.contains('open');
-  document.querySelectorAll('.msel-drop.open').forEach(function(d){d.classList.remove('open');});
-  if(!isOpen)drop.classList.add('open');
-}
-function applyMSel(){
-  var cliVals=getMSelVals('msel-cli-drop');
-  var funVals=getMSelVals('msel-fun-drop');
-  var estVals=getMSelVals('msel-est-drop');
-  document.getElementById('msel-cli-lbl').textContent=cliVals.length?cliVals.length+' selec.':'Todos';
-  document.getElementById('msel-fun-lbl').textContent=funVals.length?funVals.length+' selec.':'Todos';
-  document.getElementById('msel-est-lbl').textContent=estVals.length?estVals.length+' selec.':'Todos';
-  document.querySelector('#msel-cli .msel-btn').className='msel-btn'+(cliVals.length?' active':'');
-  document.querySelector('#msel-fun .msel-btn').className='msel-btn'+(funVals.length?' active':'');
-  document.querySelector('#msel-est .msel-btn').className='msel-btn'+(estVals.length?' active':'');
-  render();
-}
-function clearMSel(){
-  document.querySelectorAll('.msel-drop input[type=checkbox]').forEach(function(i){i.checked=false;});
-  applyMSel();
-}
-document.addEventListener('click',function(e){
-  if(!e.target.closest('.msel-wrap'))document.querySelectorAll('.msel-drop.open').forEach(function(d){d.classList.remove('open');});
-});
 function gFilt(){
   var cliVals=getMSelVals('msel-cli-drop');
   var funVals=getMSelVals('msel-fun-drop');
