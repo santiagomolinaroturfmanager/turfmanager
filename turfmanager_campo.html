@@ -111,6 +111,14 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg3);min-he
 .btn-completar{width:100%;padding:14px;border-radius:var(--br);border:none;background:var(--green);color:#fff;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:4px}
 .btn-completar:active{background:var(--green2)}
 .drop-cell{cursor:default;}
+.msel-wrap{position:relative;display:inline-block}
+.msel-btn{font-size:12px;padding:4px 10px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg2);color:var(--tx);cursor:pointer;font-family:inherit;white-space:nowrap}
+.msel-btn.active{background:var(--blue);color:#fff;border-color:var(--blue)}
+.msel-drop{display:none;position:absolute;top:calc(100% + 4px);left:0;background:var(--bg);border:0.5px solid var(--bo2);border-radius:var(--br);min-width:170px;z-index:50;box-shadow:0 4px 16px rgba(0,0,0,.12);padding:4px 0;max-height:240px;overflow-y:auto}
+.msel-drop.open{display:block}
+.msel-item{display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:13px;cursor:pointer;white-space:nowrap}
+.msel-item:hover{background:var(--bg2)}
+.msel-item input{accent-color:var(--blue);cursor:pointer;flex-shrink:0;width:16px;height:16px}
 .done-row{display:flex;align-items:center;gap:10px;padding:10px 0;color:var(--tx2);font-size:13px}
 .done-row i{color:var(--green);font-size:20px}
 
@@ -151,20 +159,25 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg3);min-he
     <div id="topbar-pend" style="font-size:11px;color:rgba(255,255,255,.8)"></div>
   </div>
 
-  <div id="admin-bar" style="display:none;background:#E8F1FB;border-bottom:0.5px solid var(--bo);padding:8px 16px;display:none;flex-wrap:wrap;gap:6px;align-items:center">
+  <div id="admin-bar" style="display:none;background:#E8F1FB;border-bottom:0.5px solid var(--bo);padding:8px 16px;flex-wrap:wrap;gap:6px;align-items:center">
   <span style="font-size:11px;font-weight:600;color:var(--blue2)">Filtros admin</span>
-  <select id="af-fun" onchange="render()" style="font-size:12px;padding:4px 8px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg);color:var(--tx);font-family:inherit">
-    <option value="">Todos los funcionarios</option>
-  </select>
-  <select id="af-cli" onchange="render()" style="font-size:12px;padding:4px 8px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg);color:var(--tx);font-family:inherit">
-    <option value="">Todos los clientes</option>
-  </select>
-  <select id="af-est" onchange="render()" style="font-size:12px;padding:4px 8px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg);color:var(--tx);font-family:inherit">
-    <option value="">Todos los estados</option>
-    <option value="pendiente">Pendiente</option>
-    <option value="en_curso">En curso</option>
-    <option value="completada">Completada</option>
-  </select>
+  <div class="msel-wrap" id="af-msel-fun">
+    <button class="msel-btn" onclick="toggleMSelC('af-msel-fun')"><span id="af-fun-lbl">Todos los funcionarios</span> ▾</button>
+    <div class="msel-drop" id="af-fun-drop"></div>
+  </div>
+  <div class="msel-wrap" id="af-msel-cli">
+    <button class="msel-btn" onclick="toggleMSelC('af-msel-cli')"><span id="af-cli-lbl">Todos los clientes</span> ▾</button>
+    <div class="msel-drop" id="af-cli-drop"></div>
+  </div>
+  <div class="msel-wrap" id="af-msel-est">
+    <button class="msel-btn" onclick="toggleMSelC('af-msel-est')"><span id="af-est-lbl">Todos los estados</span> ▾</button>
+    <div class="msel-drop" id="af-est-drop">
+      <label class="msel-item"><input type="checkbox" value="pendiente" onchange="applyMSelC()"> Pendiente</label>
+      <label class="msel-item"><input type="checkbox" value="en_curso" onchange="applyMSelC()"> En curso</label>
+      <label class="msel-item"><input type="checkbox" value="completada" onchange="applyMSelC()"> Completada</label>
+    </div>
+  </div>
+  <button onclick="clearMSelC()" style="font-size:11px;padding:4px 8px;border-radius:var(--br);border:0.5px solid var(--bo2);background:none;cursor:pointer;font-family:inherit">✕ Limpiar</button>
 </div>
 <div class="view-bar">
     <button class="view-btn on" id="btn-dia" onclick="setView('dia')">📅 Día</button>
@@ -428,29 +441,37 @@ function render(){
   else renderSemana();
 }
 function populateAdminFilters(){
-  var afFun=document.getElementById('af-fun');
-  var afCli=document.getElementById('af-cli');
-  if(!afFun||!afCli)return;
-  var selFun=afFun.value,selCli=afCli.value;
-  afFun.innerHTML='<option value="">Todos los funcionarios</option>';
-  funcionarios.forEach(function(f){afFun.innerHTML+='<option value="'+f.nombre+'">'+f.nombre+'</option>';});
-  afFun.value=selFun;
-  afCli.innerHTML='<option value="">Todos los clientes</option>';
-  clientes.forEach(function(c){afCli.innerHTML+='<option value="'+c.id+'">'+c.nombre+'</option>';});
-  afCli.value=selCli;
+  var funDrop=document.getElementById('af-fun-drop');
+  var cliDrop=document.getElementById('af-cli-drop');
+  if(!funDrop||!cliDrop)return;
+  var funChecked=getMSelValsC('af-fun-drop');
+  var cliChecked=getMSelValsC('af-cli-drop');
+  funDrop.innerHTML='';
+  funcionarios.forEach(function(f){
+    var lbl=document.createElement('label');lbl.className='msel-item';
+    lbl.innerHTML='<input type="checkbox" value="'+f.nombre+'"'+(funChecked.indexOf(f.nombre)>=0?' checked':'')+' onchange="applyMSelC()"> '+f.nombre;
+    funDrop.appendChild(lbl);
+  });
+  cliDrop.innerHTML='';
+  clientes.forEach(function(c){
+    var lbl=document.createElement('label');lbl.className='msel-item';
+    lbl.innerHTML='<input type="checkbox" value="'+c.id+'"'+(cliChecked.indexOf(String(c.id))>=0?' checked':'')+' onchange="applyMSelC()"> '+c.nombre;
+    cliDrop.appendChild(lbl);
+  });
 }
 function getAdminTasks(date){
-  var afFun=document.getElementById('af-fun');
-  var afCli=document.getElementById('af-cli');
-  var afEst=document.getElementById('af-est');
-  var selFun=afFun?afFun.value:'';
-  var selCli=afCli?parseInt(afCli.value)||0:0;
-  var selEst=afEst?afEst.value:'';
+  var funVals=getMSelValsC('af-fun-drop');
+  var cliVals=getMSelValsC('af-cli-drop');
+  var estVals=getMSelValsC('af-est-drop');
+  // Update labels
+  if(funVals.length)document.getElementById('af-fun-lbl').textContent=funVals.length+' selec.';
+  if(cliVals.length)document.getElementById('af-cli-lbl').textContent=cliVals.length+' selec.';
+  if(estVals.length)document.getElementById('af-est-lbl').textContent=estVals.length+' selec.';
   return tasks.filter(function(t){
     if(date&&t.fec!==date)return false;
-    if(selFun&&tFuns(t).indexOf(selFun)<0)return false;
-    if(selCli&&t.cli!==selCli)return false;
-    if(selEst&&t.est!==selEst)return false;
+    if(funVals.length&&!funVals.some(function(f){return tFuns(t).indexOf(f)>=0;}))return false;
+    if(cliVals.length&&cliVals.indexOf(String(t.cli))<0)return false;
+    if(estVals.length&&estVals.indexOf(t.est)<0)return false;
     return true;
   });
 }
@@ -707,11 +728,11 @@ function cambiarFecha(id, newFec){
   openCards[id]=true;
   showSaveStatus('Guardando...',false);
   saveBack().then(function(){
-    showSaveStatus('Guardado ✓',true);
-    setTimeout(hideSaveStatus,2000);
+    showSaveStatus('✓ Fecha guardada',true);
+    setTimeout(hideSaveStatus,3000);
   }).catch(function(){
-    showSaveStatus('Error — reintentando...',false);
-    setTimeout(function(){saveBack().then(function(){showSaveStatus('Guardado ✓',true);setTimeout(hideSaveStatus,2000);});},3000);
+    showSaveStatus('Sin conexión — reintentando...',false);
+    setTimeout(function(){saveBack().then(function(){showSaveStatus('✓ Guardado',true);setTimeout(hideSaveStatus,3000);});},3000);
   });
   if(cView==='dia'){
     cDay=newFec;
@@ -767,13 +788,18 @@ function completar(id){
   novs.unshift({id:Date.now(),tipo:t.obs?'anomalia':'ok',fun:mainFun,txt:novTxt,fec:fD(new Date()),leida:false});
   openCards[id]=false;
   showSaveStatus('Guardando...',false);
-  saveBack().then(function(){
-    showSaveStatus('Guardado ✓',true);
-    setTimeout(function(){hideSaveStatus();},2500);
-  }).catch(function(){
-    showSaveStatus('Error — reintentando...',false);
-    setTimeout(function(){saveBack().then(function(){showSaveStatus('Guardado ✓',true);setTimeout(hideSaveStatus,2000);});},3000);
-  });
+  var _ci=0;
+  function _doSave(){
+    saveBack().then(function(){
+      showSaveStatus('✓ Completada y guardada',true);
+      setTimeout(hideSaveStatus,6000);
+    }).catch(function(){
+      _ci++;
+      if(_ci<4){showSaveStatus('Sin conexión, reintentando ('+_ci+'/3)...',false);setTimeout(_doSave,3000);}
+      else{showSaveStatus('⚠️ No se guardó. Tocá ↻ y completá de nuevo.',false);}
+    });
+  }
+  _doSave();
   render();
 }
 
@@ -921,6 +947,29 @@ function saveNewTask(){
 }
 function CM3campo(id){document.getElementById(id).style.display='none';}
 var _newTaskDate='',_newTaskHour=-1;
+// ── MULTI-SELECT FILTERS ────────────────────────────────────
+function getMSelValsC(dropId){
+  var drop=document.getElementById(dropId);if(!drop)return[];
+  return Array.from(drop.querySelectorAll('input:checked')).map(function(i){return i.value;});
+}
+function toggleMSelC(wrapId){
+  var drop=document.getElementById(wrapId).querySelector('.msel-drop');
+  var isOpen=drop.classList.contains('open');
+  document.querySelectorAll('.msel-drop.open').forEach(function(d){d.classList.remove('open');});
+  if(!isOpen)drop.classList.add('open');
+}
+function applyMSelC(){render();}
+function clearMSelC(){
+  document.querySelectorAll('#admin-bar input[type=checkbox]').forEach(function(i){i.checked=false;});
+  document.getElementById('af-fun-lbl').textContent='Todos los funcionarios';
+  document.getElementById('af-cli-lbl').textContent='Todos los clientes';
+  document.getElementById('af-est-lbl').textContent='Todos los estados';
+  document.querySelectorAll('#admin-bar .msel-btn').forEach(function(b){b.className='msel-btn';});
+  render();
+}
+document.addEventListener('click',function(e){
+  if(!e.target.closest('.msel-wrap'))document.querySelectorAll('.msel-drop.open').forEach(function(d){d.classList.remove('open');});
+});
 // ── TOUCH DRAG ENGINE ──────────────────────────────────────
 var _tdId=null,_tdClone=null,_tdOX=0,_tdOY=0,_tdTimer=null,_tdActive=false,_tdStartX=0,_tdStartY=0;
 function touchDragStart(e,tid){

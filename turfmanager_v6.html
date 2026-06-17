@@ -661,10 +661,26 @@ function ST(t){
 // SELECTS
 // ================================================================
 function rebuildSelects(){
-  const fc=document.getElementById('fcli');fc.innerHTML='<option value="">Todos</option>';
-  clientes.forEach(c=>fc.innerHTML+=`<option value="${c.id}">${c.nombre}</option>`);
-  const ff=document.getElementById('ffun');ff.innerHTML='<option value="">Todos</option>';
-  funcionarios.forEach(f=>ff.innerHTML+=`<option value="${f.nombre}">${f.nombre}</option>`);
+  var mCliDrop=document.getElementById('msel-cli-drop');
+  if(mCliDrop){
+    var cliChecked=getMSelVals('msel-cli-drop');
+    mCliDrop.innerHTML='';
+    clientes.forEach(function(c){
+      var lbl=document.createElement('label');lbl.className='msel-item';
+      lbl.innerHTML='<input type="checkbox" value="'+c.id+'"'+(cliChecked.indexOf(String(c.id))>=0?' checked':'')+' onchange="applyMSel()"> '+c.nombre;
+      mCliDrop.appendChild(lbl);
+    });
+  }
+  var mFunDrop=document.getElementById('msel-fun-drop');
+  if(mFunDrop){
+    var funChecked=getMSelVals('msel-fun-drop');
+    mFunDrop.innerHTML='';
+    funcionarios.forEach(function(f){
+      var lbl=document.createElement('label');lbl.className='msel-item';
+      lbl.innerHTML='<input type="checkbox" value="'+f.nombre+'"'+(funChecked.indexOf(f.nombre)>=0?' checked':'')+' onchange="applyMSel()"> '+f.nombre;
+      mFunDrop.appendChild(lbl);
+    });
+  }
   const nc=document.getElementById('ncli');nc.innerHTML='<option value="">Seleccionar...</option>';
   clientes.forEach(c=>nc.innerHTML+=`<option value="${c.id}">${c.nombre}</option>`);
   const nt=document.getElementById('ntar');nt.innerHTML='';
@@ -739,13 +755,45 @@ function rUC(){var cid=parseInt(document.getElementById('rcli').value)||null;var
 // ================================================================
 // CALENDAR
 // ================================================================
+function getMSelVals(dropId){
+  var drop=document.getElementById(dropId);
+  if(!drop)return[];
+  return Array.from(drop.querySelectorAll('input:checked')).map(function(i){return i.value;});
+}
+function toggleMSel(wrapId){
+  var drop=document.getElementById(wrapId).querySelector('.msel-drop');
+  var isOpen=drop.classList.contains('open');
+  document.querySelectorAll('.msel-drop.open').forEach(function(d){d.classList.remove('open');});
+  if(!isOpen)drop.classList.add('open');
+}
+function applyMSel(){
+  var cliVals=getMSelVals('msel-cli-drop');
+  var funVals=getMSelVals('msel-fun-drop');
+  var estVals=getMSelVals('msel-est-drop');
+  document.getElementById('msel-cli-lbl').textContent=cliVals.length?cliVals.length+' selec.':'Todos';
+  document.getElementById('msel-fun-lbl').textContent=funVals.length?funVals.length+' selec.':'Todos';
+  document.getElementById('msel-est-lbl').textContent=estVals.length?estVals.length+' selec.':'Todos';
+  document.querySelector('#msel-cli .msel-btn').className='msel-btn'+(cliVals.length?' active':'');
+  document.querySelector('#msel-fun .msel-btn').className='msel-btn'+(funVals.length?' active':'');
+  document.querySelector('#msel-est .msel-btn').className='msel-btn'+(estVals.length?' active':'');
+  render();
+}
+function clearMSel(){
+  document.querySelectorAll('.msel-drop input[type=checkbox]').forEach(function(i){i.checked=false;});
+  applyMSel();
+}
+document.addEventListener('click',function(e){
+  if(!e.target.closest('.msel-wrap'))document.querySelectorAll('.msel-drop.open').forEach(function(d){d.classList.remove('open');});
+});
 function gFilt(){
-  const fc=document.getElementById('fcli').value,ff=document.getElementById('ffun').value,fe=document.getElementById('fest').value;
-  return tasks.filter(t=>{
+  var cliVals=getMSelVals('msel-cli-drop');
+  var funVals=getMSelVals('msel-fun-drop');
+  var estVals=getMSelVals('msel-est-drop');
+  return tasks.filter(function(t){
     if(t.est==='cancelada')return false;
-    if(fc&&t.cli!=fc)return false;
-    if(ff&&tFuns(t).indexOf(ff)<0)return false;
-    if(fe&&t.est!==fe)return false;
+    if(cliVals.length&&cliVals.indexOf(String(t.cli))<0)return false;
+    if(funVals.length&&!funVals.some(function(f){return tFuns(t).indexOf(f)>=0;}))return false;
+    if(estVals.length&&estVals.indexOf(t.est)<0)return false;
     return true;
   });
 }
