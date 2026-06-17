@@ -249,13 +249,26 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
   <button class="btn primary" id="btnadd" onclick="ONT(false)"><i class="ti ti-plus"></i> Nueva tarea</button>
 </div>
 <div class="fbar" id="fb">
-  <label>Cliente:</label><select id="fcli" class="inline" onchange="render()"><option value="">Todos</option></select>
-  <label>Funcionario:</label><select id="ffun" class="inline" onchange="render()"><option value="">Todos</option></select>
+  <label>Cliente:</label>
+  <div class="msel-wrap" id="msel-cli">
+    <button class="msel-btn" onclick="toggleMSel('msel-cli')"><span id="msel-cli-lbl">Todos</span> ▾</button>
+    <div class="msel-drop" id="msel-cli-drop"></div>
+  </div>
+  <label>Funcionario:</label>
+  <div class="msel-wrap" id="msel-fun">
+    <button class="msel-btn" onclick="toggleMSel('msel-fun')"><span id="msel-fun-lbl">Todos</span> ▾</button>
+    <div class="msel-drop" id="msel-fun-drop"></div>
+  </div>
   <label>Estado:</label>
-  <select id="fest" class="inline" onchange="render()">
-    <option value="">Todos</option><option value="pendiente">Pendiente</option>
-    <option value="en_curso">En curso</option><option value="completada">Completada</option>
-  </select>
+  <div class="msel-wrap" id="msel-est">
+    <button class="msel-btn" onclick="toggleMSel('msel-est')"><span id="msel-est-lbl">Todos</span> ▾</button>
+    <div class="msel-drop" id="msel-est-drop">
+      <label class="msel-item"><input type="checkbox" value="pendiente" onchange="applyMSel()"> Pendiente</label>
+      <label class="msel-item"><input type="checkbox" value="en_curso" onchange="applyMSel()"> En curso</label>
+      <label class="msel-item"><input type="checkbox" value="completada" onchange="applyMSel()"> Completada</label>
+    </div>
+  </div>
+  <button class="btn sm" onclick="clearMSel()">✕ Limpiar</button>
 </div>
 <div class="content">
   <div id="tab-semana"></div>
