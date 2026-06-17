@@ -1679,6 +1679,11 @@ function saveEditFun(){
   if(!nombre){alert('Ingresa el nombre');return;}
   f.nombre=nombre;
   f.username=username||nombre.split(' ')[0].toLowerCase();
+  var passEl=document.getElementById('efun-pass');
+  var newPass=passEl?passEl.value.trim():'';
+  if(newPass)f.password=newPass;
+  // Clear field so next funcionario doesn't inherit it
+  if(passEl)passEl.value='';
   CM3('mefun');saveState();rebuildSelects();renderCfg();
 }
 function addFuncionario(){var nombre=document.getElementById('cfg-fun-name').value.trim();if(!nombre)return;var usernameEl=document.getElementById('cfg-fun-user');var username=usernameEl?usernameEl.value.trim().toLowerCase().replace(/\s+/g,''):'';funcionarios.push({id:nxFun++,nombre:nombre,username:username||nombre.split(' ')[0].toLowerCase(),clientes:[]});document.getElementById('cfg-fun-name').value='';if(usernameEl)usernameEl.value='';rebuildSelects();renderCfg();}
@@ -2204,7 +2209,7 @@ async function syncToSupabase(){
     ]);
     // Step 2: upsert-only for clientes/funcionarios (FK constraints prevent delete)
     if(clientes.length) await sbUpsert('clientes',clientes);
-    if(funcionarios.length) await sbUpsert('funcionarios',funcionarios.map(function(f){return{id:f.id,nombre:f.nombre,username:f.username||f.nombre.split(' ')[0].toLowerCase(),clientes:f.clientes};}));
+    if(funcionarios.length) await sbUpsert('funcionarios',funcionarios.map(function(f){return{id:f.id,nombre:f.nombre,username:f.username||f.nombre.split(' ')[0].toLowerCase(),password:f.password||'',clientes:f.clientes};}));
     setSBStatus(true);
   } catch(e){
     console.warn('Supabase sync failed:',e);
