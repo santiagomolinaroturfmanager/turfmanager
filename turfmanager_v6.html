@@ -639,20 +639,7 @@ function tareasDeCancha(cliId,nombre){
   return(ca&&canTipo(ca)==='sintetica')?tiposTareaSint:tiposTarea;
 }
 function tFuns(t){return Array.isArray(t.funs)?t.funs:(t.fun?[t.fun]:[]);}
-function hayConflicto(funs,fec,des,has,excId){
-  if(!funs||!funs.length)return[];
-  var ts=parseInt(des)*60+parseInt((des.split(':')[1])||0);
-  var te=parseInt(has)*60+parseInt((has.split(':')[1])||0);
-  var res=[];
-  funs.forEach(function(fun){tasks.forEach(function(t){
-    if(t.id===excId||t.fec!==fec)return;
-    var tf=tFuns(t);if(tf.indexOf(fun)<0)return;
-    var os=parseInt(t.des)*60+parseInt((t.des.split(':')[1])||0);
-    var oe=parseInt(t.has)*60+parseInt((t.has.split(':')[1])||0);
-    if(ts<oe&&te>os)res.push({fun:fun,tar:t.tar,can:t.can,des:t.des,has:t.has});
-  });});
-  return res;
-}
+function hayConflicto(funs,fec,des,has,excId){return[];}
 function nUCmaq2(){
   var cid=parseInt(document.getElementById('ncli').value)||0;
   var tar=document.getElementById('ntar').value;
@@ -834,7 +821,7 @@ function render(){
       dt.forEach(t=>{
         var bg=cBG(t.cli),tx=cTX(t.cli),drag=t.est==='pendiente';
         var fns=tFuns(t),fshort=fns.map(function(f){return f.split(' ')[0];}).join('+');
-        var cflStyle=hayConflicto(fns,t.fec,t.des,t.has,t.id).length>0?';outline:2px solid #E24B4A;outline-offset:-2px':'';
+        var cflStyle='';
         // Long-press drag: set draggable only after 400ms hold
         var dragAttr=drag?' draggable="true" ondragstart="ds2(event,'+t.id+')" ondragend="de2()"':'';
         h+='<div class="chip st-'+t.est+'" id="chip-'+t.id+'" style="background:'+bg+';color:'+tx+cflStyle+'"'+dragAttr+' onclick="OD('+t.id+')">';
@@ -1538,9 +1525,7 @@ function ONT(ir,taskId,prefillDate,prefillHour){
     }
     document.querySelectorAll('.dbt').forEach(function(b){b.classList.remove('sel');});
     document.querySelectorAll('#nfun-checks input').forEach(function(inp){inp.checked=false;});
-    var cflWarn=document.getElementById('cfl-warn');
-    if(cflWarn)cflWarn.style.display='none';
-  }
+      }
   CM3('mdet');
   document.getElementById('mnew').style.display='flex';
 }
