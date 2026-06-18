@@ -723,24 +723,10 @@ function iniciar(id){
     if(m)t.hsIni=+m.hs||0;
   }
   openCards[id]=true;
-  showSaveStatus('Guardando...',false);
+  showSaveStatus('✓ Tarea iniciada',true);
+  setTimeout(hideSaveStatus,3000);
   render();
-  saveBackVerified(id,'en_curso',4).then(function(verified){
-    if(verified){
-      showSaveStatus('✓ Tarea iniciada y confirmada',true);
-      setTimeout(hideSaveStatus,3000);
-      delete _pendingSyncErrors[id];
-      showSyncErrorBanner();
-    } else {
-      hideSaveStatus();
-      _pendingSyncErrors[id]=function(){
-        saveBackVerified(id,'en_curso',3).then(function(ok){
-          if(ok){delete _pendingSyncErrors[id];showSyncErrorBanner();render();}
-        });
-      };
-      showSyncErrorBanner();
-    }
-  });
+  queueTaskSync(t,'en_curso');
 }
 
 function cambiarFecha(id, newFec){
@@ -749,19 +735,14 @@ function cambiarFecha(id, newFec){
   if(obsEl)t.obs=obsEl.value;
   t.fec=newFec;
   openCards[id]=true;
-  showSaveStatus('Guardando...',false);
-  saveBack().then(function(){
-    showSaveStatus('✓ Fecha guardada',true);
-    setTimeout(hideSaveStatus,3000);
-  }).catch(function(){
-    showSaveStatus('Sin conexión — reintentando...',false);
-    setTimeout(function(){saveBack().then(function(){showSaveStatus('✓ Guardado',true);setTimeout(hideSaveStatus,3000);});},3000);
-  });
+  showSaveStatus('✓ Fecha guardada',true);
+  setTimeout(hideSaveStatus,3000);
   if(cView==='dia'){
     cDay=newFec;
     cMon=monday(new Date(newFec+'T12:00'));
   }
   render();
+  queueTaskSync(t,t.est);
 }
 async function saveSingleTask(t){
   var row={id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],
@@ -779,35 +760,71 @@ async function verifyTaskSaved(taskId, expectedEst){
     return false;
   }
 }
-// Queue of failed saves that need retry — keyed by taskId
-var _pendingSyncErrors={};
-function showSyncErrorBanner(){
-  var ids=Object.keys(_pendingSyncErrors);
+// Background sync queue — retries silently, no user action needed
+var _syncQueue={}; // taskId -> {task, attempts, est}
+var _syncQueueTimer=null;
+
+function queueTaskSync(t, expectedEst){
+  _syncQueue[t.id]={task:t, attempts:0, est:expectedEst, startedAt:Date.now()};
+  processSyncQueue();
+}
+
+async function processSyncQueue(){
+  var ids=Object.keys(_syncQueue);
+  if(!ids.length)return;
+  for(var idx=0;idx<ids.length;idx++){
+    var id=ids[idx];
+    var entry=_syncQueue[id];
+    if(!entry)continue;
+    try{
+      await saveSingleTask(entry.task);
+      var ok=await verifyTaskSaved(entry.task.id, entry.est);
+      if(ok){
+        delete _syncQueue[id];
+        // Background full sync (machines, novedades) — fire and forget
+        saveBack().catch(function(){});
+      } else {
+        entry.attempts++;
+      }
+    }catch(e){
+      entry.attempts++;
+    }
+  }
+  updateSyncIndicator();
+  // Keep retrying every 4 seconds while there's anything pending
+  if(Object.keys(_syncQueue).length){
+    if(_syncQueueTimer)clearTimeout(_syncQueueTimer);
+    _syncQueueTimer=setTimeout(processSyncQueue,4000);
+  }
+}
+
+function updateSyncIndicator(){
+  var ids=Object.keys(_syncQueue);
+  var el=document.getElementById('sync-error-banner');
+  if(!el)return;
   if(!ids.length){
-    document.getElementById('sync-error-banner').style.display='none';
+    el.style.display='none';
     return;
   }
-  var msg=ids.length===1
-    ? '1 cambio no se pudo confirmar en el servidor. Seguí trabajando, vamos a reintentar.'
-    : ids.length+' cambios no se pudieron confirmar en el servidor. Seguí trabajando, vamos a reintentar.';
-  document.getElementById('sync-error-msg').textContent=msg;
-  document.getElementById('sync-error-banner').style.display='block';
+  // Only show the banner if something has been pending for more than 15 seconds
+  var oldEnough=ids.some(function(id){return Date.now()-_syncQueue[id].startedAt>15000;});
+  if(oldEnough){
+    var msg=ids.length===1
+      ? 'Sincronizando 1 cambio pendiente...'
+      : 'Sincronizando '+ids.length+' cambios pendientes...';
+    document.getElementById('sync-error-msg').textContent=msg;
+    el.style.display='block';
+  } else {
+    el.style.display='none';
+  }
 }
+
 function dismissSyncBanner(){
   document.getElementById('sync-error-banner').style.display='none';
 }
 function retrySyncErrors(){
-  var ids=Object.keys(_pendingSyncErrors);
-  ids.forEach(function(id){
-    var retryFn=_pendingSyncErrors[id];
-    if(retryFn)retryFn();
-  });
+  processSyncQueue();
 }
-// Auto-retry pending sync errors every 20 seconds in the background
-setInterval(function(){
-  var ids=Object.keys(_pendingSyncErrors);
-  if(ids.length)retrySyncErrors();
-},20000);
 async function saveBackVerified(taskId, expectedEst, maxTries){
   maxTries=maxTries||5;
   var t=tasks.find(function(x){return x.id===taskId;});
@@ -877,25 +894,11 @@ function completar(id){
   if(!novs)novs=[];
   novs.unshift({id:Date.now(),tipo:t.obs?'anomalia':'ok',fun:mainFun,txt:novTxt,fec:fD(new Date()),leida:false});
   openCards[id]=false;
-  showSaveStatus('Guardando...',false);
+  // Optimistic UI: show success immediately, sync happens in background
+  showSaveStatus('✓ Completada',true);
+  setTimeout(hideSaveStatus,3000);
   render();
-  saveBackVerified(id,'completada',4).then(function(verified){
-    if(verified){
-      showSaveStatus('✓ Completada y confirmada',true);
-      setTimeout(hideSaveStatus,4000);
-      delete _pendingSyncErrors[id];
-      showSyncErrorBanner();
-    } else {
-      hideSaveStatus();
-      // Don't block — queue for background retry, let user keep working
-      _pendingSyncErrors[id]=function(){
-        saveBackVerified(id,'completada',3).then(function(ok){
-          if(ok){delete _pendingSyncErrors[id];showSyncErrorBanner();render();}
-        });
-      };
-      showSyncErrorBanner();
-    }
-  });
+  queueTaskSync(t,'completada');
 }
 
 // ── SAVE BACK TO MAIN APP ────────────────────────────────────
