@@ -432,8 +432,8 @@ function renderWeekStrip(){
 function updatePendBadge(){
   var today=fD(new Date());
   var n=isAdmin
-    ?tasks.filter(function(t){return t.fec===today&&t.est!=='completada';}).length
-    :tasks.filter(function(t){return t.fec===today&&tFuns(t).indexOf(cFun)>=0&&t.est!=='completada';}).length;
+    ?tasks.filter(function(t){return t.fec===today&&t.est!=='completada'&&t.est!=='cancelada';}).length
+    :tasks.filter(function(t){return t.fec===today&&tFuns(t).indexOf(cFun)>=0&&t.est!=='completada'&&t.est!=='cancelada';}).length;
   var el=document.getElementById('topbar-pend');
   el.textContent=n>0?n+' pendiente'+(n!==1?'s hoy':' hoy'):'';
 }
@@ -470,11 +470,11 @@ function getAdminTasks(date){
   var funVals=getMSelValsC('af-fun-drop');
   var cliVals=getMSelValsC('af-cli-drop');
   var estVals=getMSelValsC('af-est-drop');
-  // Update labels
   if(funVals.length)document.getElementById('af-fun-lbl').textContent=funVals.length+' selec.';
   if(cliVals.length)document.getElementById('af-cli-lbl').textContent=cliVals.length+' selec.';
   if(estVals.length)document.getElementById('af-est-lbl').textContent=estVals.length+' selec.';
   return tasks.filter(function(t){
+    if(t.est==='cancelada')return false;
     if(date&&t.fec!==date)return false;
     if(funVals.length&&!funVals.some(function(f){return tFuns(t).indexOf(f)>=0;}))return false;
     if(cliVals.length&&cliVals.indexOf(String(t.cli))<0)return false;
@@ -492,7 +492,7 @@ function renderDia(){
 
   var myTasks=isAdmin
     ?getAdminTasks(cDay).sort(function(a,b){return a.des.localeCompare(b.des);})
-    :tasks.filter(function(t){return t.fec===cDay&&tFuns(t).indexOf(cFun)>=0;}).sort(function(a,b){return a.des.localeCompare(b.des);});
+    :tasks.filter(function(t){return t.fec===cDay&&tFuns(t).indexOf(cFun)>=0&&t.est!=='cancelada';}).sort(function(a,b){return a.des.localeCompare(b.des);});
 
   var el=document.getElementById('main-content');
   if(!myTasks.length){
@@ -515,7 +515,7 @@ function renderSemana(){
   var weekTasks=[];
   for(var i=0;i<7;i++){
     var ds2=fD(aD(cMon,i));
-    var dTasks=isAdmin?getAdminTasks(ds2):tasks.filter(function(t){return t.fec===ds2&&tFuns(t).indexOf(cFun)>=0;});
+    var dTasks=isAdmin?getAdminTasks(ds2):tasks.filter(function(t){return t.fec===ds2&&tFuns(t).indexOf(cFun)>=0&&t.est!=='cancelada';});
     dTasks.forEach(function(t){weekTasks.push(t);});
   }
   if(!weekTasks.length){
@@ -573,7 +573,7 @@ function renderSemana(){
         var isToday=ds===today;
         var cellTasks=isAdmin
           ?getAdminTasks(ds).filter(function(t){return parseInt(t.des.split(':')[0])===hh;})
-          :tasks.filter(function(t){return t.fec===ds&&tFuns(t).indexOf(cFun)>=0&&parseInt(t.des.split(':')[0])===hh;});
+          :tasks.filter(function(t){return t.fec===ds&&tFuns(t).indexOf(cFun)>=0&&t.est!=='cancelada'&&parseInt(t.des.split(':')[0])===hh;});
         var cell=document.createElement('div');
         cell.style.cssText='border-right:0.5px solid var(--bo);border-bottom:0.5px solid var(--bo);min-height:44px;padding:2px;background:'+(isToday?'#FAFCFF':'var(--bg)');
         (function(tapDs){
