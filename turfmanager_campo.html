@@ -154,7 +154,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg3);min-he
       <div class="topbar-logo">TurfManager Campo</div>
       <div class="topbar-name" id="topbar-name"></div>
     </div>
-    <div id="save-status" style="display:none;font-size:11px;padding:4px 10px;border-radius:20px;background:rgba(255,255,255,.2);color:#fff;flex-shrink:0"></div>
+    
     <button onclick="forceRefresh()" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:50%;width:32px;height:32px;font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center" title="Actualizar">↻</button>
     <div id="topbar-pend" style="font-size:11px;color:rgba(255,255,255,.8)"></div>
   </div>
@@ -763,6 +763,13 @@ function cambiarFecha(id, newFec){
   }
   render();
 }
+async function saveSingleTask(t){
+  var row={id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],
+    maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,
+    spc:t.spc||'',est:t.est,obs:t.obs||'',rec_id:t.recId||null,
+    chk:t.chk||{},hs_ini:t.hsIni||null,hs_fin:t.hsFin||null,ts_ini:t.tsIni||null};
+  await sbUpsert('tareas',[row]);
+}
 async function verifyTaskSaved(taskId, expectedEst){
   try{
     var rows=await sbGet('tareas','select=id,est&id=eq.'+taskId);
@@ -803,25 +810,30 @@ setInterval(function(){
 },20000);
 async function saveBackVerified(taskId, expectedEst, maxTries){
   maxTries=maxTries||5;
+  var t=tasks.find(function(x){return x.id===taskId;});
+  if(!t)return false;
   for(var i=0;i<maxTries;i++){
     try{
-      await saveBack();
-      // Verify the specific task actually has the expected state in Supabase
+      // Save THIS task directly and atomically — not the whole array
+      await saveSingleTask(t);
       var verified=await verifyTaskSaved(taskId, expectedEst);
-      if(verified)return true;
+      if(verified){
+        // Task confirmed — now sync the rest (maquinas, novedades) in background, non-blocking
+        saveBack().catch(function(e){console.warn('background full sync error',e);});
+        return true;
+      }
       console.warn('Verificacion fallo, intento '+(i+1)+'/'+maxTries);
     }catch(e){
-      console.warn('saveBack fallo, intento '+(i+1)+'/'+maxTries, e);
+      console.warn('saveSingleTask fallo, intento '+(i+1)+'/'+maxTries, e);
     }
-    // Wait before retry, increasing delay
-    await new Promise(function(res){setTimeout(res, 1500*(i+1));});
+    await new Promise(function(res){setTimeout(res, 1200*(i+1));});
   }
   return false;
 }
 function showSaveStatus(msg,ok){
   var el=document.getElementById('save-status');if(!el)return;
-  el.textContent=msg;el.style.display='';
-  el.style.background=ok?'rgba(99,153,34,.8)':'rgba(255,255,255,.25)';
+  el.textContent=msg;el.style.display='block';
+  el.style.background=ok?'#3B6D11':'#1a1a18';
 }
 function hideSaveStatus(){
   var el=document.getElementById('save-status');if(el)el.style.display='none';
@@ -1141,6 +1153,7 @@ async function forceRefresh(){
 initLogin();
 </script>
 
+<div id="save-status" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);font-size:13px;font-weight:600;padding:10px 20px;border-radius:24px;background:#1a1a18;color:#fff;z-index:9998;box-shadow:0 4px 16px rgba(0,0,0,.25);white-space:nowrap;max-width:90vw"></div>
 <div id="sync-error-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#A32D2D;color:#fff;padding:10px 14px;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.2)">
   <div style="display:flex;align-items:center;gap:10px;max-width:600px;margin:0 auto;flex-wrap:wrap">
     <span style="font-size:18px;flex-shrink:0">⚠️</span>

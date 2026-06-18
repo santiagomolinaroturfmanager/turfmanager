@@ -1667,14 +1667,22 @@ function MDone(){
 function DEL(){
   var t=tasks.find(function(x){return x.id===selId;});if(!t)return;
   if(t.recId){
-    // Store id in modal dataset — more reliable than global variable
     var modal=document.getElementById('mrec-del-task');
     modal.dataset.tid=selId;
     modal.style.display='flex';
   } else {
-    if(!confirm('Eliminar esta tarea?'))return;
-    tasks=tasks.filter(function(x){return x.id!==selId;});
-    CM3('mdet');saveState();render();
+    if(!confirm('¿Eliminar esta tarea'+(t.est==='completada'?' (ya completada)':'')+'? Esta acción no se puede deshacer.'))return;
+    var delId=selId;
+    tasks=tasks.filter(function(x){return x.id!==delId;});
+    CM3('mdet');render();
+    // Delete directly from Supabase — don't wait for full syncTable
+    fetch(SB_URL+'/rest/v1/tareas?id=eq.'+delId,{
+      method:'DELETE',
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
+    }).then(function(r){
+      if(!r.ok)console.warn('Error eliminando tarea de Supabase');
+    }).catch(function(e){console.warn('Error eliminando tarea',e);});
+    saveStateLocal();
   }
 }
 function delRecTaskSolo(){
@@ -2254,7 +2262,7 @@ async function syncToSupabase(){
     sbPendingSync=false;
     // Step 1: sync dependent tables first (delete+insert safe)
     await Promise.all([
-      syncTable('tareas',tasks.map(function(t){return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',rec_id:t.recId||null,chk:t.chk||{},hs_ini:t.hsIni||null,hs_fin:t.hsFin||null};})),
+      (tasks.length?sbUpsert('tareas',tasks.map(function(t){return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',rec_id:t.recId||null,chk:t.chk||{},hs_ini:t.hsIni||null,hs_fin:t.hsFin||null};})):Promise.resolve()),
       (recs.length?syncTable('recurrentes',recs.map(function(r){return{id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias,hasta:r.hasta,skip:r.skip||[]};})):Promise.resolve()),
       syncTable('novedades',novs.map(function(n){return{id:n.id,tipo:n.tipo,fun:n.fun,txt:n.txt,fec:n.fec,leida:n.leida};})),
       syncTable('alertas',alertas.map(function(a){return{id:a.id,descripcion:a.desc||a.descripcion||'',tipo:a.tipo,dias:a.dias,ref:a.ref||'',ctx:a.ctx||'',notes:a.notes||'',fecha:a.fecha||null,estado:a.estado,leida:a.leida};})),
