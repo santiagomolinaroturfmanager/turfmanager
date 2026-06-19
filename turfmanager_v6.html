@@ -1197,6 +1197,30 @@ async function renderReg(){
   });
   h+=`</tbody></table></div>`;
   h+=`<p style="font-size:10px;color:var(--tx3);margin-top:7px"><i class="ti ti-grip-vertical" style="vertical-align:-1px;margin-right:2px"></i>Arrastrá las filas para reordenarlas · Lluvia en azul · Temperatura en amarillo (Aeropuerto Carrasco)</p>`;
+  // ── Tabla de especificaciones ──
+  var specTasks=tasks.filter(function(t){
+    if(t.cli!==cid)return false;
+    if(can&&t.can!==can)return false;
+    if(t.est==='cancelada')return false;
+    if(!t.spc||!t.spc.trim())return false;
+    var d=new Date(t.fec+'T12:00');
+    return d.getMonth()===cMonth&&d.getFullYear()===cYear;
+  }).sort(function(a,b){return a.fec.localeCompare(b.fec);});
+  if(specTasks.length){
+    h+='<div style="margin-top:18px">';
+    h+='<h3 style="font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:6px"><i class="ti ti-flask"></i> Especificaciones del mes</h3>';
+    h+='<div style="border:0.5px solid var(--bo);border-radius:var(--brl);overflow:hidden">';
+    specTasks.forEach(function(t,idx){
+      var d=new Date(t.fec+'T12:00');
+      var fechaStr=String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0');
+      h+='<div style="display:flex;gap:12px;padding:10px 14px;border-bottom:'+(idx<specTasks.length-1?'0.5px solid var(--bo)':'none')+';background:'+(idx%2===0?'var(--bg)':'var(--bg2)')+'">';
+      h+='<div style="font-size:12px;color:var(--tx2);min-width:48px;flex-shrink:0">'+fechaStr+'</div>';
+      h+='<div style="font-size:12px;font-weight:500;min-width:120px;flex-shrink:0">'+t.tar+(t.can?' · '+t.can:'')+'</div>';
+      h+='<div style="font-size:12px;color:var(--tx);flex:1">'+t.spc+'</div>';
+      h+='</div>';
+    });
+    h+='</div></div>';
+  }
   document.getElementById('reg-ct').innerHTML=h;
 }
 
