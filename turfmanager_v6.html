@@ -1202,6 +1202,7 @@ async function renderReg(){
     if(t.cli!==cid)return false;
     if(can&&t.can!==can)return false;
     if(t.est==='cancelada')return false;
+    if(t.tar==='Corte'||t.tar==='Marcado')return false;
     if(!t.spc||!t.spc.trim())return false;
     var d=new Date(t.fec+'T12:00');
     return d.getMonth()===cMonth&&d.getFullYear()===cYear;
