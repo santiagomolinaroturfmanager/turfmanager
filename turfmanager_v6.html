@@ -896,7 +896,7 @@ function recDragSolo(){
   if(!_pendingDrag)return;
   var t=tasks.find(function(x){return x.id===_pendingDrag.tid;});if(!t)return;
   t.fec=_pendingDrag.newFec;t.des=_pendingDrag.newDes;t.has=_pendingDrag.newHas;
-  t.recId=null;
+  t.recId=null;t._dirty=true;
   _pendingDrag=null;
   CM3('mdrag-confirm');CM3('mrec-drag');dragId=null;saveState();render();
 }
@@ -935,7 +935,7 @@ function dropWeekNav(e,dir){
     document.getElementById('mrec-drag').style.display='flex';
     dragId=null;return;
   }
-  t.fec=newFec;
+  t.fec=newFec;t._dirty=true;
   cMon=aD(cMon,dir*7);
   dragId=null;saveState();render();
 }
@@ -1589,7 +1589,7 @@ function SVT(){
   }
   if(editingId){
     var t=tasks.find(function(x){return x.id===editingId;});
-    if(t){Object.assign(t,base,{fec:fec});saveSingleTaskWeb(t);}
+    if(t){Object.assign(t,base,{fec:fec,_dirty:true});saveSingleTaskWeb(t);}
     editingId=null;CM3('mnew');saveState();render();return;
   }
   if(isRec){
@@ -1602,7 +1602,7 @@ function SVT(){
     recs.push({id:nxRec++,dias:dias2,hasta:hasta2,...base});
     GRT();CM3('mnew');saveState();renderRec();ST('rec');
   } else {
-    var newTask={id:nxId++,...base,fec:fec,est:'pendiente',obs:'',recId:null,chk:{},hsIni:null,hsFin:null};
+    var newTask={id:nxId++,...base,fec:fec,est:'pendiente',obs:'',recId:null,chk:{},hsIni:null,hsFin:null,_dirty:true};
     tasks.push(newTask);
     saveSingleTaskWeb(newTask);
     CM3('mnew');saveState();render();
@@ -2296,10 +2296,17 @@ async function syncToSupabase(){
     sbPendingSync=false;
     // Step 1: sync dependent tables first (delete+insert safe)
     await Promise.all([
-      // NOTE: Tasks are NOT bulk-synced from web app to avoid overwriting
-      // states set by campo app. Tasks are only written individually
-      // via SVT() (create/edit) and DEL() (delete).
-      Promise.resolve(),
+      // Only sync tasks that were modified locally (marked as dirty)
+      (function(){
+        var dirtyTasks=tasks.filter(function(t){return t._dirty;}).map(function(t){
+          return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',
+            fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',rec_id:t.recId||null,
+            chk:t.chk||{},hs_ini:t.hsIni||null,hs_fin:t.hsFin||null};
+        });
+        return dirtyTasks.length?sbUpsert('tareas',dirtyTasks).then(function(){
+          tasks.forEach(function(t){delete t._dirty;});
+        }):Promise.resolve();
+      })(),
       (recs.length?syncTable('recurrentes',recs.map(function(r){return{id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias,hasta:r.hasta,skip:r.skip||[]};})):Promise.resolve()),
       syncTable('novedades',novs.map(function(n){return{id:n.id,tipo:n.tipo,fun:n.fun,txt:n.txt,fec:n.fec,leida:n.leida};})),
       syncTable('alertas',alertas.map(function(a){return{id:a.id,descripcion:a.desc||a.descripcion||'',tipo:a.tipo,dias:a.dias,ref:a.ref||'',ctx:a.ctx||'',notes:a.notes||'',fecha:a.fecha||null,estado:a.estado,leida:a.leida};})),
