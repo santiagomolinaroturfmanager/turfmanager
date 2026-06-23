@@ -913,7 +913,7 @@ function recDragTodas(){
     tasks=tasks.filter(function(tk){return!(tk.recId===t.recId&&tk.fec>=hoy&&tk.est==='pendiente');});
     GRT();
   }
-  t.fec=_pendingDrag.newFec;t.des=_pendingDrag.newDes;t.has=_pendingDrag.newHas;
+  t.fec=_pendingDrag.newFec;t.des=_pendingDrag.newDes;t.has=_pendingDrag.newHas;t._dirty=true;
   _pendingDrag=null;
   CM3('mdrag-confirm');CM3('mrec-drag');dragId=null;saveState();render();
 }
@@ -2156,6 +2156,7 @@ function dragConfirmMover(){
   if(!_pendingDrag)return;
   var t=tasks.find(function(x){return x.id===_pendingDrag.tid;});if(!t)return;
   t.fec=_pendingDrag.newFec;t.des=_pendingDrag.newDes;t.has=_pendingDrag.newHas;
+  t._dirty=true;
   _pendingDrag=null;dragId=null;
   CM3('mdrag-confirm');saveState();render();
 }
