@@ -897,6 +897,7 @@ function recDragSolo(){
   var t=tasks.find(function(x){return x.id===_pendingDrag.tid;});if(!t)return;
   t.fec=_pendingDrag.newFec;t.des=_pendingDrag.newDes;t.has=_pendingDrag.newHas;
   t.recId=null;t._dirty=true;
+  saveTaskToSupabase(t);
   _pendingDrag=null;
   CM3('mdrag-confirm');CM3('mrec-drag');dragId=null;saveState();render();
 }
@@ -914,6 +915,7 @@ function recDragTodas(){
     GRT();
   }
   t.fec=_pendingDrag.newFec;t.des=_pendingDrag.newDes;t.has=_pendingDrag.newHas;t._dirty=true;
+  saveTaskToSupabase(t);
   _pendingDrag=null;
   CM3('mdrag-confirm');CM3('mrec-drag');dragId=null;saveState();render();
 }
@@ -1058,11 +1060,14 @@ function COMP(id){
     }
   }
   t.est='completada';
+  t._dirty=true;
   openCards[id]=false;
   var mainFun=tFuns(t)[0]||'?';
   var novTxt=t.obs?(t.tar+' - '+t.can+': "'+t.obs+'"'):(t.tar+' - '+t.can+' completado');
   novs.unshift({id:nxNov++,tipo:t.obs?'anomalia':'ok',fun:mainFun,txt:novTxt,fec:fD(new Date()),leida:false});
   UNB();
+  // Save directly to Supabase — don't rely on bulk sync
+  saveTaskToSupabase(t);
   try{saveState();}catch(e){console.warn('saveState',e);}
   openCards[id]=false;
   if(cFView==='semana')renderFuncSem(); else RFD();
@@ -1589,7 +1594,7 @@ function SVT(){
   }
   if(editingId){
     var t=tasks.find(function(x){return x.id===editingId;});
-    if(t){Object.assign(t,base,{fec:fec,_dirty:true});saveSingleTaskWeb(t);}
+    if(t){Object.assign(t,base,{fec:fec,_dirty:true});saveTaskToSupabase(t);}
     editingId=null;CM3('mnew');saveState();render();return;
   }
   if(isRec){
@@ -1604,7 +1609,7 @@ function SVT(){
   } else {
     var newTask={id:nxId++,...base,fec:fec,est:'pendiente',obs:'',recId:null,chk:{},hsIni:null,hsFin:null,_dirty:true};
     tasks.push(newTask);
-    saveSingleTaskWeb(newTask);
+    saveTaskToSupabase(newTask);
     CM3('mnew');saveState();render();
   }
 }
@@ -1685,18 +1690,19 @@ function MDone(){
       }
     }
     checkMaqAlertas();
+    saveTaskToSupabase(t);
   }
   CM3('mdet');
   try{saveState();}catch(e){}
   render();
   if(cTab==='reg')renderReg();
 }
-function saveSingleTaskWeb(t){
-  var row={id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],
-    maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,
-    spc:t.spc||'',est:t.est,obs:t.obs||'',rec_id:t.recId||null,
-    chk:t.chk||{},hs_ini:t.hsIni||null,hs_fin:t.hsFin||null};
-  return sbUpsert('tareas',[row]).catch(function(e){console.warn('saveSingleTaskWeb error',e);});
+function saveTaskToSupabase(t){
+  if(!t)return;
+  var row={id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',
+    fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',
+    rec_id:t.recId||null,chk:t.chk||{},hs_ini:t.hsIni||null,hs_fin:t.hsFin||null};
+  return sbUpsert('tareas',[row]).catch(function(e){console.warn('saveTaskToSupabase error',e);});
 }
 function DEL(){
   var t=tasks.find(function(x){return x.id===selId;});if(!t)return;
@@ -2157,6 +2163,7 @@ function dragConfirmMover(){
   var t=tasks.find(function(x){return x.id===_pendingDrag.tid;});if(!t)return;
   t.fec=_pendingDrag.newFec;t.des=_pendingDrag.newDes;t.has=_pendingDrag.newHas;
   t._dirty=true;
+  saveTaskToSupabase(t);
   _pendingDrag=null;dragId=null;
   CM3('mdrag-confirm');saveState();render();
 }
@@ -2297,17 +2304,8 @@ async function syncToSupabase(){
     sbPendingSync=false;
     // Step 1: sync dependent tables first (delete+insert safe)
     await Promise.all([
-      // Only sync tasks that were modified locally (marked as dirty)
-      (function(){
-        var dirtyTasks=tasks.filter(function(t){return t._dirty;}).map(function(t){
-          return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',
-            fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',rec_id:t.recId||null,
-            chk:t.chk||{},hs_ini:t.hsIni||null,hs_fin:t.hsFin||null};
-        });
-        return dirtyTasks.length?sbUpsert('tareas',dirtyTasks).then(function(){
-          tasks.forEach(function(t){delete t._dirty;});
-        }):Promise.resolve();
-      })(),
+      // Tasks are saved individually via saveTaskToSupabase() — never via bulk sync
+      Promise.resolve(),
       (recs.length?syncTable('recurrentes',recs.map(function(r){return{id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias,hasta:r.hasta,skip:r.skip||[]};})):Promise.resolve()),
       syncTable('novedades',novs.map(function(n){return{id:n.id,tipo:n.tipo,fun:n.fun,txt:n.txt,fec:n.fec,leida:n.leida};})),
       syncTable('alertas',alertas.map(function(a){return{id:a.id,descripcion:a.desc||a.descripcion||'',tipo:a.tipo,dias:a.dias,ref:a.ref||'',ctx:a.ctx||'',notes:a.notes||'',fecha:a.fecha||null,estado:a.estado,leida:a.leida};})),

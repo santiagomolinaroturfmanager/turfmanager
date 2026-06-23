@@ -641,6 +641,7 @@ function renderTaskCard(t){
     body+='<input type="date" id="fec-'+t.id+'" value="'+t.fec+'" onchange="cambiarFecha('+t.id+',this.value)" style="flex:1;padding:6px 10px;font-size:14px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg);color:var(--tx);font-family:inherit">';
     body+='</div>';
     if(t.spc) body+='<div class="spec-box"><div class="spec-lbl">Especificaciones</div>'+t.spc+'</div>';
+
     if(t.maq){
       var elapsed2=t.tsIni?parseFloat(((Date.now()-t.tsIni)/3600000).toFixed(2)):null;
       var elapsedStr=elapsed2!==null&&t.est==='en_curso'?' <span style="font-size:10px;color:var(--green)">'+elapsed2+'hs transcurridas</span>':'';
