@@ -1622,10 +1622,13 @@ function GRT(){
         var d=aD(weekStart,dn===0?6:dn-1);
         if(d<tod||d>hastaDate)return;
         var ds=fD(d);
-        // Skip if any task (including cancelada) exists for this rec+date
+        // Skip if any task exists for this rec+date
         if(tasks.some(function(t){return t.recId===r.id&&t.fec===ds;}))return;
-        // Skip if a cancelada task exists for same rec content on this date
+        // Skip if a cancelada task exists for same content on this date
         if(tasks.some(function(t){return t.est==='cancelada'&&t.cli===r.cli&&t.can===r.can&&t.tar===r.tar&&t.fec===ds;}))return;
+        // Skip if a COMPLETED task already exists for same cli+can+tar+date
+        // (task may have been completed even without recId link)
+        if(tasks.some(function(t){return (t.est==='completada'||t.est==='en_curso')&&t.cli===r.cli&&t.can===r.can&&t.tar===r.tar&&t.fec===ds;}))return;
         tasks.push({id:nxId++,cli:r.cli,can:r.can,tar:r.tar,
           funs:(r.funs&&r.funs.length?r.funs:(r.fun?[r.fun]:[])),
           maq:r.maq||'',maq2:r.maq2||'',fec:ds,des:r.des,has:r.has,spc:r.spc||'',

@@ -904,14 +904,11 @@ function completar(id){
 
 // ── SAVE BACK TO MAIN APP ────────────────────────────────────
 async function saveBack(){
+  // saveBack only syncs machines and novedades
+  // Tasks are saved individually via saveSingleTask() to avoid overwriting
+  // states set by other users or the web app
   if(!sbOnline){return;}
   try{
-    var tasksToSync=tasks.map(function(t){
-      return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],
-        maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,
-        spc:t.spc||'',est:t.est,obs:t.obs||'',rec_id:t.recId||null,
-        chk:t.chk||{},hs_ini:t.hsIni||null,hs_fin:t.hsFin||null};
-    });
     var maqToSync=maquinas.map(function(m){
       return{id:m.id,nombre:m.nombre,tipo:m.tipo,marca:m.marca||'',
         cat:m.cat||'general',scope:m.scope,cli_id:m.cliId||null,
@@ -922,7 +919,6 @@ async function saveBack(){
       return{id:n.id,tipo:n.tipo,fun:n.fun,txt:n.txt,fec:n.fec,leida:n.leida};
     });
     await Promise.all([
-      tasksToSync.length?sbUpsert('tareas',tasksToSync):Promise.resolve(),
       maqToSync.length?sbUpsert('maquinas',maqToSync):Promise.resolve(),
       novToSync.length?sbUpsert('novedades',novToSync):Promise.resolve()
     ]);
