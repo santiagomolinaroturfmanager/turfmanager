@@ -531,34 +531,37 @@ function renderDia(){
   }
 
   var h='<div style="font-size:13px;font-weight:600;color:var(--tx2);margin-bottom:16px">'+dayLabel+'</div>';
-  myTasks.forEach(function(t){
-    h+=renderTaskCard(t);
-  });
-  // Actividades deportivas del día
-  // Filter actividades by the funcionario being viewed
+  // Filter actividades by funcionario's clients AND cancha filter
   var viewFun=isAdmin?getMSelValsC('af-fun-drop')[0]:cFun;
   var funCliIds=[];
   if(viewFun){
-    var funObj=funcionarios.find(function(f){return f.nombre===viewFun;});
-    funCliIds=funObj&&funObj.clientes?funObj.clientes:[];
+    var funObj2=funcionarios.find(function(f){return f.nombre===viewFun;});
+    funCliIds=funObj2&&funObj2.clientes?funObj2.clientes:[];
   }
   var dayActs=acts.filter(function(a){
     if(a.fec!==cDay)return false;
     if(funCliIds.length&&a.cli&&funCliIds.indexOf(a.cli)<0)return false;
+    if(_ffbCan&&a.can!==_ffbCan)return false;
     return true;
-  }).sort(function(a,b){return a.des.localeCompare(b.des);});
-  if(dayActs.length){
-    h+='<div style="font-size:12px;font-weight:600;color:var(--tx2);margin:16px 0 8px;text-transform:uppercase;letter-spacing:.3px">⚽ Actividades en canchas</div>';
-    dayActs.forEach(function(a){
+  });
+  // Merge tasks and actividades, sort chronologically
+  var allItems=[];
+  myTasks.forEach(function(t){allItems.push({type:'task',des:t.des,data:t});});
+  dayActs.forEach(function(a){allItems.push({type:'act',des:a.des.substring(0,5),data:a});});
+  allItems.sort(function(a,b){return a.des.localeCompare(b.des);});
+  allItems.forEach(function(item){
+    if(item.type==='task'){
+      h+=renderTaskCard(item.data);
+    } else {
+      var a=item.data;
       var actBg={practica:'#3B6D11',partido:'#A32D2D',amistoso:'#7A5C00'};
       var bg2=actBg[a.tipo]||'#555';
       h+='<div style="background:'+bg2+';color:#fff;border-radius:12px;padding:12px 16px;margin-bottom:8px">';
-      h+='<div style="font-weight:600;font-size:15px">'+a.can+'</div>';
-      h+='<div style="font-size:13px;margin-top:4px">'+a.des+' – '+a.has+'</div>';
-      h+='<div style="font-size:13px;margin-top:2px">'+a.detalle+'</div>';
+      h+='<div style="font-weight:600;font-size:13px">⚽ '+a.can+' — '+a.detalle+'</div>';
+      h+='<div style="font-size:12px;margin-top:4px;opacity:.85">'+a.des.substring(0,5)+' – '+a.has.substring(0,5)+'</div>';
       h+='</div>';
-    });
-  }
+    }
+  });
   el.innerHTML=h;
 }
 
@@ -968,7 +971,10 @@ function updateFunFilterCanchas(){
   var canchas=[];
   funClis.forEach(function(cid){
     var c=clientes.find(function(x){return x.id===cid;});
-    if(c&&c.canchas)c.canchas.forEach(function(cn){if(canchas.indexOf(cn)<0)canchas.push(cn);});
+    if(c&&c.canchas)c.canchas.forEach(function(cn){
+      var cnNombre=typeof cn==='object'?cn.nombre:cn;
+      if(cnNombre&&canchas.indexOf(cnNombre)<0)canchas.push(cnNombre);
+    });
   });
   canchas.sort();
   canSel.innerHTML='<option value="">Todas</option>';
