@@ -185,6 +185,24 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg3);min-he
     <button class="view-btn" id="btn-reporte" style="display:none" onclick="setView('reporte')">📊 Resumen</button>
   </div>
 
+  <!-- FUNCIONARIO FILTER BAR -->
+  <div id="fun-filter-bar" style="display:none;background:var(--bg2);border-bottom:0.5px solid var(--bo);padding:8px 16px;flex-wrap:wrap;gap:8px;align-items:center">
+    <span style="font-size:11px;font-weight:600;color:var(--tx2)">Filtrar:</span>
+    <div id="ffb-cli-wrap" style="display:none;align-items:center;gap:6px">
+      <span style="font-size:11px;color:var(--tx2)">Cliente:</span>
+      <select id="ffb-cli" onchange="onFunFilterCli()" style="font-size:12px;padding:4px 8px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg);color:var(--tx);font-family:inherit">
+        <option value="">Todos</option>
+      </select>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="font-size:11px;color:var(--tx2)">Cancha:</span>
+      <select id="ffb-can" onchange="render()" style="font-size:12px;padding:4px 8px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg);color:var(--tx);font-family:inherit">
+        <option value="">Todas</option>
+      </select>
+    </div>
+    <button onclick="clearFunFilter()" style="font-size:11px;padding:3px 8px;border-radius:var(--br);border:0.5px solid var(--bo2);background:none;cursor:pointer;font-family:inherit">✕ Limpiar</button>
+  </div>
+
   <div class="week-nav">
     <button class="week-nav-btn" onclick="navWeek(-1)"><i class="ti ti-chevron-left"></i></button>
     <span class="week-label" id="week-label"></span>
@@ -494,7 +512,7 @@ function renderDia(){
 
   var myTasks=isAdmin
     ?getAdminTasks(cDay).sort(function(a,b){return a.des.localeCompare(b.des);})
-    :tasks.filter(function(t){return t.fec===cDay&&tFuns(t).indexOf(cFun)>=0&&t.est!=='cancelada';}).sort(function(a,b){return a.des.localeCompare(b.des);});
+    :getFunFilteredTasks(tasks.filter(function(t){return t.fec===cDay&&tFuns(t).indexOf(cFun)>=0&&t.est!=='cancelada';})).sort(function(a,b){return a.des.localeCompare(b.des);});
 
   var el=document.getElementById('main-content');
   if(!myTasks.length){
@@ -549,7 +567,7 @@ function renderSemana(){
   var weekTasks=[];
   for(var i=0;i<7;i++){
     var ds2=fD(aD(cMon,i));
-    var dTasks=isAdmin?getAdminTasks(ds2):tasks.filter(function(t){return t.fec===ds2&&tFuns(t).indexOf(cFun)>=0&&t.est!=='cancelada';});
+    var dTasks=isAdmin?getAdminTasks(ds2):getFunFilteredTasks(tasks.filter(function(t){return t.fec===ds2&&tFuns(t).indexOf(cFun)>=0&&t.est!=='cancelada';}));
     dTasks.forEach(function(t){weekTasks.push(t);});
   }
   if(!weekTasks.length){
@@ -911,6 +929,83 @@ function toggleMaqCheck(taskId, item){
   render();
   queueTaskSync(t,t.est);
 }
+// ── FUNCIONARIO FILTER BAR ──────────────────────────────
+var _ffbCli='', _ffbCan='';
+
+function initFunFilterBar(){
+  var bar=document.getElementById('fun-filter-bar');
+  if(!bar||isAdmin)return;
+  var funObj=funcionarios.find(function(f){return f.nombre===cFun;});
+  if(!funObj)return;
+  var funClis=funObj.clientes||[];
+  var cliWrap=document.getElementById('ffb-cli-wrap');
+  var cliSel=document.getElementById('ffb-cli');
+  var canSel=document.getElementById('ffb-can');
+  // Show client filter only if funcionario has more than 1 client
+  if(funClis.length>1){
+    cliWrap.style.display='flex';
+    cliSel.innerHTML='<option value="">Todos</option>';
+    funClis.forEach(function(cid){
+      var c=clientes.find(function(x){return x.id===cid;});
+      if(c){var o=document.createElement('option');o.value=cid;o.textContent=c.nombre;if(_ffbCli==cid)o.selected=true;cliSel.appendChild(o);}
+    });
+  } else {
+    cliWrap.style.display='none';
+    if(funClis.length===1)_ffbCli=funClis[0];
+  }
+  // Populate cancha filter based on selected client
+  updateFunFilterCanchas();
+  bar.style.display='flex';
+}
+
+function updateFunFilterCanchas(){
+  var canSel=document.getElementById('ffb-can');if(!canSel)return;
+  var funObj=funcionarios.find(function(f){return f.nombre===cFun;});
+  if(!funObj)return;
+  var funClis=_ffbCli?[parseInt(_ffbCli)]:(funObj.clientes||[]);
+  var canchas=[];
+  funClis.forEach(function(cid){
+    var c=clientes.find(function(x){return x.id===cid;});
+    if(c&&c.canchas)c.canchas.forEach(function(cn){if(canchas.indexOf(cn)<0)canchas.push(cn);});
+  });
+  canchas.sort();
+  canSel.innerHTML='<option value="">Todas</option>';
+  canchas.forEach(function(cn){
+    var o=document.createElement('option');
+    o.value=cn;o.textContent=cn;
+    if(_ffbCan===cn)o.selected=true;
+    canSel.appendChild(o);
+  });
+}
+
+function onFunFilterCli(){
+  var cliSel=document.getElementById('ffb-cli');
+  _ffbCli=cliSel?cliSel.value:'';
+  _ffbCan='';
+  updateFunFilterCanchas();
+  render();
+}
+
+function clearFunFilter(){
+  _ffbCli='';_ffbCan='';
+  var cliSel=document.getElementById('ffb-cli');
+  var canSel=document.getElementById('ffb-can');
+  if(cliSel)cliSel.value='';
+  if(canSel)canSel.value='';
+  render();
+}
+
+function getFunFilteredTasks(taskList){
+  if(isAdmin)return taskList;
+  var canSel=document.getElementById('ffb-can');
+  _ffbCan=canSel?canSel.value:'';
+  return taskList.filter(function(t){
+    if(_ffbCli&&t.cli!==parseInt(_ffbCli))return false;
+    if(_ffbCan&&t.can!==_ffbCan)return false;
+    return true;
+  });
+}
+
 function hDiff(des,has){var h1=parseInt(des.split(':')[0]),m1=parseInt(des.split(':')[1]||0);var h2=parseInt(has.split(':')[0]),m2=parseInt(has.split(':')[1]||0);return Math.max(0,((h2*60+m2)-(h1*60+m1))/60);}
 
 function completar(id){
