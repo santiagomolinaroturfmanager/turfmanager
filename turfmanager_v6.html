@@ -343,6 +343,13 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
 <div id="mnew" style="display:none" class="modal-bg">
   <div class="modal">
     <h2 id="mtitle">Nueva tarea</h2>
+    <!-- Tipo de tarea -->
+    <div style="display:flex;gap:0;border:0.5px solid var(--bo2);border-radius:var(--br);overflow:hidden;margin-bottom:14px">
+      <button id="ntipo-canchas" onclick="setNTipo('canchas')" style="flex:1;padding:9px;border:none;background:var(--blue);color:#fff;font-weight:600;font-size:13px;cursor:pointer;font-family:inherit">🌿 Mant. Canchas</button>
+      <button id="ntipo-maquinaria" onclick="setNTipo('maquinaria')" style="flex:1;padding:9px;border:none;background:var(--bg2);color:var(--tx2);font-size:13px;cursor:pointer;font-family:inherit">⚙️ Mant. Maquinaria</button>
+    </div>
+    <!-- CANCHAS section -->
+    <div id="ntipo-canchas-sec">
     <div class="fg">
       <div class="fr"><label>Cliente</label><select id="ncli" onchange="nUC()"><option value="">Seleccionar...</option></select></div>
       <div class="fr"><label>Cancha</label><select id="ncan"><option value="">—</option></select></div>
@@ -363,6 +370,36 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
       <div class="fr" style="margin-top:10px"><label>Programar hasta</label><input type="date" id="nrec-hasta"></div>
     </div>
     <div class="fr"><label>Especificaciones</label><input type="text" id="nspc" placeholder="Ej: 2.25mm · 50kg 30-0-20"></div>
+    </div><!-- end ntipo-canchas-sec -->
+    <!-- MAQUINARIA section -->
+    <div id="ntipo-maquinaria-sec" style="display:none">
+      <div class="fg">
+        <div class="fr" style="grid-column:span 2"><label>Máquina</label><select id="nmaq-svc" onchange="nLoadSvcChecks()" style="width:100%"><option value="">Seleccionar máquina...</option></select></div>
+        <div class="fr" style="grid-column:span 2"><label>Funcionarios</label><div id="nfun-checks-svc" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;min-height:32px"></div></div>
+        <div class="fr"><label>Fecha</label><input type="date" id="nfec-svc"></div>
+        <div class="fr" style="display:flex;gap:8px">
+          <div style="flex:1"><label>Desde</label><input type="time" id="ndes-svc" value="08:00" style="width:100%"></div>
+          <div style="flex:1"><label>Hasta</label><input type="time" id="nhas-svc" value="10:00" style="width:100%"></div>
+        </div>
+      </div>
+      <div class="fr" id="ndrow-svc" style="display:none">
+        <label>Días de la semana</label>
+        <div class="dp" id="ndp-svc">
+          <button class="dbt" onclick="this.classList.toggle('sel')" data-d="1">Lu</button><button class="dbt" onclick="this.classList.toggle('sel')" data-d="2">Ma</button><button class="dbt" onclick="this.classList.toggle('sel')" data-d="3">Mi</button><button class="dbt" onclick="this.classList.toggle('sel')" data-d="4">Ju</button><button class="dbt" onclick="this.classList.toggle('sel')" data-d="5">Vi</button><button class="dbt" onclick="this.classList.toggle('sel')" data-d="6">Sá</button><button class="dbt" onclick="this.classList.toggle('sel')" data-d="0">Do</button>
+        </div>
+        <div class="fr" style="margin-top:10px"><label>Programar hasta</label><input type="date" id="nrec-hasta-svc"></div>
+      </div>
+      <div id="nsvc-checks-wrap" style="display:none;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:600;color:var(--tx2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.3px">Tareas a realizar</div>
+        <div id="nsvc-checks" style="border:0.5px solid var(--bo);border-radius:var(--br);overflow:hidden"></div>
+      </div>
+      <div class="fr"><label>Observaciones</label><textarea id="nsvc-obs" rows="3" placeholder="Novedades, problemas, medidas tomadas..." style="width:100%;padding:8px 10px;font-size:13px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg2);color:var(--tx);font-family:inherit;resize:vertical"></textarea></div>
+      <!-- Recurrente toggle -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <input type="checkbox" id="nsvc-rec" onchange="toggleSvcRec()" style="accent-color:var(--blue);width:16px;height:16px">
+        <label for="nsvc-rec" style="font-size:13px;cursor:pointer">Tarea recurrente</label>
+      </div>
+    </div><!-- end ntipo-maquinaria-sec -->
     <div class="ma"><button onclick="CM3('mnew')">Cancelar</button><button class="bp" id="mbtn-save" onclick="SVT()">Guardar</button></div>
   </div>
 </div>
@@ -886,6 +923,90 @@ function de2(){
 }
 function dov(e){e.preventDefault();e.currentTarget.classList.add('dov');}
 function dol(e){e.currentTarget.classList.remove('dov');}
+// ── MANT. MAQUINARIA ─────────────────────────────────────────
+var _nTipo='canchas';
+function SVTMaquinaria(){
+  var maq=document.getElementById('nmaq-svc').value;
+  if(!maq){alert('Seleccioná una máquina');return;}
+  var funs=[...document.querySelectorAll('#nfun-checks-svc input:checked')].map(function(i){return i.value;});
+  if(!funs.length){alert('Seleccioná al menos un funcionario');return;}
+  var fec=document.getElementById('nfec-svc').value;
+  if(!fec){alert('Seleccioná una fecha');return;}
+  var des=document.getElementById('ndes-svc').value||'08:00';
+  var has=document.getElementById('nhas-svc').value||'10:00';
+  var obs=document.getElementById('nsvc-obs').value||'';
+  var svcChecks=[...document.querySelectorAll('#nsvc-checks input:checked')].map(function(i){return i.value;});
+  var isRec=document.getElementById('nsvc-rec').checked;
+  var base={cli:null,can:'',tar:'Mant. Maquinaria',funs:funs,maq:maq,maq2:'',
+    des:des,has:has,spc:obs,chk:{}};
+  // Store svcChecks in spc field as JSON prefix for now
+  // Actually store in chk field with all items
+  svcChecks.forEach(function(item){base.chk[item]=false;});
+  if(isRec){
+    var dias2=[...document.querySelectorAll('#ndp-svc .dbt.sel')].map(function(b){return parseInt(b.dataset.d);});
+    if(!dias2.length){alert('Seleccioná al menos un día');return;}
+    var hasta=document.getElementById('nrec-hasta-svc').value||new Date().getFullYear()+'-12-31';
+    recs.push({id:nxRec++,dias:dias2,hasta:hasta,...base,fec:fec});
+    GRT();CM3('mnew');saveState();renderRec();ST('rec');
+  } else {
+    var newTask={id:nxId++,...base,fec:fec,est:'pendiente',obs:obs,recId:null,hsIni:null,hsFin:null,_dirty:true};
+    tasks.push(newTask);
+    saveTaskToSupabase(newTask);
+    CM3('mnew');saveState();render();
+  }
+  // Reset form
+  setNTipo('canchas');
+}
+function setNTipo(tipo){
+  _nTipo=tipo;
+  document.getElementById('ntipo-canchas-sec').style.display=tipo==='canchas'?'':'none';
+  document.getElementById('ntipo-maquinaria-sec').style.display=tipo==='maquinaria'?'':'none';
+  document.getElementById('ntipo-canchas').style.background=tipo==='canchas'?'var(--blue)':'var(--bg2)';
+  document.getElementById('ntipo-canchas').style.color=tipo==='canchas'?'#fff':'var(--tx2)';
+  document.getElementById('ntipo-maquinaria').style.background=tipo==='maquinaria'?'var(--blue)':'var(--bg2)';
+  document.getElementById('ntipo-maquinaria').style.color=tipo==='maquinaria'?'#fff':'var(--tx2)';
+  if(tipo==='maquinaria'){
+    var sel=document.getElementById('nmaq-svc');
+    sel.innerHTML='<option value="">Seleccionar máquina...</option>';
+    maquinas.forEach(function(m){var o=document.createElement('option');o.value=m.nombre;o.textContent=m.nombre;sel.appendChild(o);});
+    var funWrap=document.getElementById('nfun-checks-svc');
+    funWrap.innerHTML='';
+    funcionarios.forEach(function(f){
+      var lbl=document.createElement('label');
+      lbl.style.cssText='display:flex;align-items:center;gap:5px;font-size:12px;padding:3px 8px;border:0.5px solid var(--bo2);border-radius:4px;cursor:pointer;background:var(--bg2)';
+      lbl.innerHTML='<input type="checkbox" value="'+f.nombre+'" style="accent-color:var(--blue)"> '+f.nombre;
+      funWrap.appendChild(lbl);
+    });
+    var dateEl=document.getElementById('nfec-svc');
+    if(dateEl&&!dateEl.value)dateEl.value=fD(new Date());
+  }
+}
+function nLoadSvcChecks(){
+  var maqNom=document.getElementById('nmaq-svc').value;
+  var m=maquinas.find(function(x){return x.nombre===maqNom;});
+  var wrap=document.getElementById('nsvc-checks-wrap');
+  var checksEl=document.getElementById('nsvc-checks');
+  if(!m){wrap.style.display='none';return;}
+  var lista=m.svcTareas&&m.svcTareas.length?m.svcTareas:SVC_TAREAS;
+  if(!lista.length){wrap.style.display='none';return;}
+  wrap.style.display='';
+  checksEl.innerHTML='';
+  lista.forEach(function(item,i){
+    var row=document.createElement('label');
+    row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;'+(i<lista.length-1?'border-bottom:0.5px solid var(--bo)':'');
+    row.innerHTML='<input type="checkbox" value="'+item+'" checked style="accent-color:var(--blue);width:16px;height:16px"> <span style="font-size:13px">'+item+'</span>';
+    checksEl.appendChild(row);
+  });
+}
+function toggleSvcRec(){
+  var isRec=document.getElementById('nsvc-rec').checked;
+  document.getElementById('ndrow-svc').style.display=isRec?'':'none';
+  if(isRec){
+    var y=new Date().getFullYear();
+    document.getElementById('nrec-hasta-svc').value=y+'-12-31';
+    document.querySelectorAll('#ndp-svc .dbt').forEach(function(b){b.classList.remove('sel');});
+  }
+}
 function dcClick(e,ds,hn){
   // Only fire if click was on empty space (not on a chip)
   if(e.target.closest('.chip'))return;
@@ -1012,7 +1133,19 @@ function RFD(){
       <div><div class="ttime">${t.des} – ${t.has}</div><div class="tst"><span class="eb ${bCls}">${bLbl}</span></div></div>
       <i class="ti ${isOpen?'ti-chevron-up':'ti-chevron-down'}" style="font-size:15px;color:var(--tx3);flex-shrink:0"></i>
     </div><div class="tbody${isOpen?'':' h'}">`;
-    if(t.spc)h+=`<div class="spec-box"><div class="spec-lbl">Especificación</div>${t.spc}</div>`;
+    if(t.spc&&t.tar!=='Mant. Maquinaria')h+=`<div class="spec-box"><div class="spec-lbl">Especificación</div>${t.spc}</div>`;
+    if(t.tar==='Mant. Maquinaria'&&t.chk&&Object.keys(t.chk).length){
+      h+='<div class="spec-box" style="border-left-color:var(--green)">';
+      h+='<div class="spec-lbl">Tareas de mantenimiento</div>';
+      Object.keys(t.chk).forEach(function(item){
+        var done=t.chk[item];
+        h+='<div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;border-bottom:0.5px solid var(--bo)">';
+        h+='<span>'+(done?'✅':'⬜')+'</span><span style="'+(done?'text-decoration:line-through;color:var(--tx3)':'')+'">'+item+'</span>';
+        h+='</div>';
+      });
+      if(t.obs)h+='<div style="font-size:12px;color:var(--tx2);margin-top:6px">'+t.obs+'</div>';
+      h+='</div>';
+    }
     if(t.est!=='completada'){
       if(maqObj)h+=`<div class="maq-hs-box"><i class="ti ti-engine" style="font-size:18px;color:var(--blue);flex-shrink:0"></i><div style="flex:1"><label>${maqObj.nombre} — Horas al iniciar</label><div style="display:flex;align-items:center;gap:8px;margin-top:4px"><input type="number" id="hsi-${t.id}" value="${t.hsIni!==null?t.hsIni:maqObj.hs}" min="0" step="0.5"><span style="font-size:10px;color:var(--blue)">Actuales: ${maqObj.hs.toFixed(1)}hs · Duración estimada: ${autoHs.toFixed(1)}hs</span></div></div></div>`;
       h+=`<div class="cl-wrap"><div class="cl-title"><span><i class="ti ti-checklist" style="vertical-align:-1px;margin-right:3px"></i>Checklist previo</span><span style="font-size:11px;color:var(--blue);font-weight:500">${doneC}/${cl.length}</span></div>
@@ -1557,10 +1690,13 @@ function ONT(ir,taskId,prefillDate,prefillHour){
     document.querySelectorAll('#nfun-checks input').forEach(function(inp){inp.checked=false;});
       }
   CM3('mdet');
+  setNTipo('canchas');
   document.getElementById('mnew').style.display='flex';
 }
 document.querySelectorAll('.dbt').forEach(b=>b.addEventListener('click',()=>b.classList.toggle('sel')));
 function SVT(){
+  // Handle Mant. Maquinaria separately
+  if(_nTipo==='maquinaria'){SVTMaquinaria();return;}
   var cid=parseInt(document.getElementById('ncli').value);
   if(!cid){alert('Selecciona un cliente');return;}
   var funs=getSelFuns();

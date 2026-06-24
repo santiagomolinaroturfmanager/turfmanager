@@ -640,7 +640,20 @@ function renderTaskCard(t){
     body+='<span style="font-size:12px;color:var(--tx2);font-weight:600">Fecha de la tarea</span>';
     body+='<input type="date" id="fec-'+t.id+'" value="'+t.fec+'" onchange="cambiarFecha('+t.id+',this.value)" style="flex:1;padding:6px 10px;font-size:14px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg);color:var(--tx);font-family:inherit">';
     body+='</div>';
-    if(t.spc) body+='<div class="spec-box"><div class="spec-lbl">Especificaciones</div>'+t.spc+'</div>';
+    if(t.spc&&t.tar!=='Mant. Maquinaria') body+='<div class="spec-box"><div class="spec-lbl">Especificaciones</div>'+t.spc+'</div>';
+    if(t.tar==='Mant. Maquinaria'&&t.chk&&Object.keys(t.chk).length){
+      body+='<div class="spec-box" style="border-left-color:#3B6D11">';
+      body+='<div class="spec-lbl">Tareas de mantenimiento</div>';
+      Object.keys(t.chk).forEach(function(item){
+        var done=t.chk[item];
+        body+='<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:0.5px solid var(--bo);cursor:pointer" onclick="toggleMaqCheck('+t.id+',\''+item+'\')">';
+        body+='<span style="font-size:22px">'+(done?'✅':'⬜')+'</span>';
+        body+='<span style="font-size:14px;'+(done?'text-decoration:line-through;color:var(--tx3)':'')+'">'+item+'</span>';
+        body+='</div>';
+      });
+      if(t.obs)body+='<div style="font-size:13px;color:var(--tx2);margin-top:8px;padding-top:8px;border-top:0.5px solid var(--bo)">'+t.obs+'</div>';
+      body+='</div>';
+    }
 
     if(t.maq){
       var elapsed2=t.tsIni?parseFloat(((Date.now()-t.tsIni)/3600000).toFixed(2)):null;
@@ -855,6 +868,14 @@ function showSaveStatus(msg,ok){
 }
 function hideSaveStatus(){
   var el=document.getElementById('save-status');if(el)el.style.display='none';
+}
+function toggleMaqCheck(taskId, item){
+  var t=tasks.find(function(x){return x.id===taskId;});if(!t)return;
+  t.chk=t.chk||{};
+  t.chk[item]=!t.chk[item];
+  openCards[t.id]=true;
+  render();
+  queueTaskSync(t,t.est);
 }
 function hDiff(des,has){var h1=parseInt(des.split(':')[0]),m1=parseInt(des.split(':')[1]||0);var h2=parseInt(has.split(':')[0]),m2=parseInt(has.split(':')[1]||0);return Math.max(0,((h2*60+m2)-(h1*60+m1))/60);}
 
