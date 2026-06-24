@@ -1878,28 +1878,39 @@ function SVT(){
 }
 function GRT(){
   const tod=new Date();tod.setHours(0,0,0,0);
+  var newTasks=[];
   recs.forEach(function(r){
     var hastaDate=new Date(r.hasta+'T23:59:00');var weekStart=gMon(tod);var sc=0;
+    // Deduplicate dias array
+    var diasUniq=[...new Set(r.dias)];
     while(weekStart<=hastaDate&&sc<60){sc++;
-      r.dias.forEach(function(dn){
+      diasUniq.forEach(function(dn){
         var d=aD(weekStart,dn===0?6:dn-1);
         if(d<tod||d>hastaDate)return;
         var ds=fD(d);
-        // Skip if any task exists for this rec+date
         if(tasks.some(function(t){return t.recId===r.id&&t.fec===ds;}))return;
-        // Skip if a cancelada task exists for same content on this date
         if(tasks.some(function(t){return t.est==='cancelada'&&t.cli===r.cli&&t.can===r.can&&t.tar===r.tar&&t.fec===ds;}))return;
-        // Skip if a COMPLETED task already exists for same cli+can+tar+date
-        // (task may have been completed even without recId link)
         if(tasks.some(function(t){return (t.est==='completada'||t.est==='en_curso')&&t.cli===r.cli&&t.can===r.can&&t.tar===r.tar&&t.fec===ds;}))return;
-        tasks.push({id:nxId++,cli:r.cli,can:r.can,tar:r.tar,
+        var newTask={id:nxId++,cli:r.cli,can:r.can,tar:r.tar,
           funs:(r.funs&&r.funs.length?r.funs:(r.fun?[r.fun]:[])),
           maq:r.maq||'',maq2:r.maq2||'',fec:ds,des:r.des,has:r.has,spc:r.spc||'',
-          est:'pendiente',obs:'',recId:r.id,chk:{},hsIni:null,hsFin:null});
+          est:'pendiente',obs:'',recId:r.id,chk:{},hsIni:null,hsFin:null};
+        tasks.push(newTask);
+        newTasks.push(newTask);
       });
       weekStart=aD(weekStart,7);
     }
   });
+  // Save newly generated tasks to Supabase
+  if(newTasks.length){
+    var rows=newTasks.map(function(t){return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,
+      funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,
+      spc:t.spc||'',est:'pendiente',obs:'',rec_id:t.recId||null,
+      chk:{},hs_ini:null,hs_fin:null};});
+    sbUpsert('tareas',rows).then(function(){
+      console.log('GRT saved '+newTasks.length+' tasks to Supabase');
+    }).catch(function(e){console.warn('GRT save error',e);});
+  }
 }
 
 // ================================================================
