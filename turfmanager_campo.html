@@ -297,6 +297,7 @@ async function loadData(){
     tasks=tarRows.map(function(t){return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',recId:t.rec_id,chk:t.chk||{},hsIni:t.hs_ini,hsFin:t.hs_fin,tsIni:t.ts_ini};});
     var actRows=await sbGet('actividades','select=*&order=fec,des');
     acts=actRows.map(function(a){return{id:a.id,cli:a.cli||null,fec:a.fec,can:a.can,des:a.des,has:a.has,tipo:a.tipo,detalle:a.detalle};});
+    if(!isAdmin)setTimeout(function(){initFunFilterBar();},100);
     recs=recRows.map(function(r){return{id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias||[],hasta:r.hasta,skip:r.skip||[]};});
     cfgRows.forEach(function(c){if(c.clave==='checklists')checklists=c.valor;});
     if(tasks.length)nxNov=Math.max.apply(null,tasks.map(function(x){return x.id;}))+1;
@@ -373,6 +374,7 @@ function enterApp(nombre){
   cMon=monday(new Date());
   cDay=fD(new Date());
   render();
+  if(!isAdmin)setTimeout(function(){initFunFilterBar();},300);
 }
 
 function logout(){
@@ -938,9 +940,9 @@ function initFunFilterBar(){
   var funObj=funcionarios.find(function(f){return f.nombre===cFun;});
   if(!funObj)return;
   var funClis=funObj.clientes||[];
+  if(!funClis.length){bar.style.display='none';return;}
   var cliWrap=document.getElementById('ffb-cli-wrap');
   var cliSel=document.getElementById('ffb-cli');
-  var canSel=document.getElementById('ffb-can');
   // Show client filter only if funcionario has more than 1 client
   if(funClis.length>1){
     cliWrap.style.display='flex';
@@ -951,9 +953,9 @@ function initFunFilterBar(){
     });
   } else {
     cliWrap.style.display='none';
-    if(funClis.length===1)_ffbCli=funClis[0];
+    _ffbCli=String(funClis[0]);
   }
-  // Populate cancha filter based on selected client
+  // Populate cancha filter
   updateFunFilterCanchas();
   bar.style.display='flex';
 }
