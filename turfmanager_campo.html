@@ -278,7 +278,7 @@ async function loadData(){
     maquinas=maqRows.map(function(m){return{id:m.id,nombre:m.nombre,tipo:m.tipo,marca:m.marca||'',cat:m.cat||'general',scope:m.scope,cliId:m.cli_id,hs:m.hs,intervalo:m.intervalo,proximo:m.proximo,tareas:m.tareas||[],svcTareas:m.svc_tareas||[],hist:m.hist||[]};});
     tasks=tarRows.map(function(t){return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',recId:t.rec_id,chk:t.chk||{},hsIni:t.hs_ini,hsFin:t.hs_fin,tsIni:t.ts_ini};});
     var actRows=await sbGet('actividades','select=*&order=fec,des');
-    acts=actRows.map(function(a){return{id:a.id,fec:a.fec,can:a.can,des:a.des,has:a.has,tipo:a.tipo,detalle:a.detalle};});
+    acts=actRows.map(function(a){return{id:a.id,cli:a.cli||null,fec:a.fec,can:a.can,des:a.des,has:a.has,tipo:a.tipo,detalle:a.detalle};});
     recs=recRows.map(function(r){return{id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias||[],hasta:r.hasta,skip:r.skip||[]};});
     cfgRows.forEach(function(c){if(c.clave==='checklists')checklists=c.valor;});
     if(tasks.length)nxNov=Math.max.apply(null,tasks.map(function(x){return x.id;}))+1;
@@ -498,7 +498,11 @@ function renderDia(){
 
   var el=document.getElementById('main-content');
   if(!myTasks.length){
-    var dayActsCheck=acts.filter(function(a){return a.fec===cDay;});
+    var dayActsCheck=acts.filter(function(a){
+    if(a.fec!==cDay)return false;
+    if(!isAdmin&&funCliIds&&funCliIds.length&&a.cli&&funCliIds.indexOf(a.cli)<0)return false;
+    return true;
+  });
     if(!dayActsCheck.length){
       el.innerHTML='<div style="font-size:13px;font-weight:600;color:var(--tx2);margin-bottom:16px">'+dayLabel+'</div>'
         +'<div class="empty"><i class="ti ti-calendar-check"></i>'+(isToday?'No tenés tareas para hoy':'Sin tareas este día')+'</div>';
@@ -511,7 +515,21 @@ function renderDia(){
     h+=renderTaskCard(t);
   });
   // Actividades deportivas del día
-  var dayActs=acts.filter(function(a){return a.fec===cDay;}).sort(function(a,b){return a.des.localeCompare(b.des);});
+  // Show actividades for clients the funcionario works for
+  var myCliIds=clientes.filter(function(c){
+    return c.canchas&&c.canchas.length>0;
+  }).map(function(c){return c.id;});
+  // If admin, show all; if funcionario, show their clients
+  var funCliIds=[];
+  if(!isAdmin&&cFun){
+    var funObj=funcionarios.find(function(f){return f.nombre===cFun;});
+    funCliIds=funObj&&funObj.clientes?funObj.clientes:[];
+  }
+  var dayActs=acts.filter(function(a){
+    if(a.fec!==cDay)return false;
+    if(!isAdmin&&funCliIds.length&&a.cli&&funCliIds.indexOf(a.cli)<0)return false;
+    return true;
+  }).sort(function(a,b){return a.des.localeCompare(b.des);});
   if(dayActs.length){
     h+='<div style="font-size:12px;font-weight:600;color:var(--tx2);margin:16px 0 8px;text-transform:uppercase;letter-spacing:.3px">⚽ Actividades en canchas</div>';
     dayActs.forEach(function(a){

@@ -422,6 +422,9 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
           <option value="">Seleccionar...</option>
         </select>
       </div>
+      <div class="fr"><label>Cliente</label>
+        <select id="act-cli"><option value="">Seleccionar...</option></select>
+      </div>
       <div class="fr"><label>Tipo</label>
         <select id="act-tipo">
           <option value="practica">Práctica</option>
@@ -903,7 +906,12 @@ function render(){
         h+='</div>';
       });
       // Actividades deportivas chips
-      var actCell=acts.filter(function(a){return a.fec===ds&&parseInt(a.des.split(':')[0])===hn;});
+      var cliVals=getMSelVals('msel-cli-drop');
+      var actCell=acts.filter(function(a){
+        if(a.fec!==ds||parseInt(a.des.split(':')[0])!==hn)return false;
+        if(cliVals.length&&a.cli&&cliVals.indexOf(String(a.cli))<0)return false;
+        return true;
+      });
       actCell.forEach(function(a){
         var actBg={practica:'#3B6D11',partido:'#A32D2D',amistoso:'#7A5C00'};
         var bg2=actBg[a.tipo]||'#555';
@@ -1061,6 +1069,10 @@ function openActModal(id){
   _editActId=id||null;
   var a=id?acts.find(function(x){return x.id===id;}):null;
   document.getElementById('mact-title').textContent=a?'Editar actividad':'Nueva actividad';
+  // Populate clientes
+  var cliSel=document.getElementById('act-cli');
+  cliSel.innerHTML='<option value="">Seleccionar...</option>';
+  clientes.forEach(function(c){var o=document.createElement('option');o.value=c.id;o.textContent=c.nombre;if(a&&a.cli===c.id)o.selected=true;cliSel.appendChild(o);});
   // Populate canchas
   var sel=document.getElementById('act-can');
   sel.innerHTML='<option value="">Seleccionar...</option>';
@@ -1084,7 +1096,9 @@ function saveAct(){
   var des=document.getElementById('act-des').value;
   var has=document.getElementById('act-has').value;
   if(!can||!detalle||!fec){alert('Completá todos los campos');return;}
-  var row={id:_editActId||nxAct++,fec:fec,can:can,des:des,has:has,tipo:tipo,detalle:detalle};
+  // Get cli from selected cancha's client or prompt
+  var actCli=parseInt(document.getElementById('act-cli')?document.getElementById('act-cli').value:0)||null;
+  var row={id:_editActId||nxAct++,cli:actCli,fec:fec,can:can,des:des,has:has,tipo:tipo,detalle:detalle};
   if(_editActId){
     var idx=acts.findIndex(function(x){return x.id===_editActId;});
     if(idx>=0)acts[idx]=row;
@@ -2679,7 +2693,7 @@ async function loadFromSupabase(){
     maquinas=maqRows.map(function(m){return{id:m.id,nombre:m.nombre,tipo:m.tipo,marca:m.marca||'',cat:m.cat||'general',scope:m.scope,cliId:m.cli_id,hs:m.hs,intervalo:m.intervalo,proximo:m.proximo,tareas:m.tareas||[],svcTareas:m.svc_tareas||[],hist:m.hist||[]};});
     tasks=tarRows.map(function(t){return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',recId:t.rec_id,chk:t.chk||{},hsIni:t.hs_ini,hsFin:t.hs_fin};})
     var actRows=await sbGet('actividades','select=*&order=fec,des');
-    acts=actRows.map(function(a){return{id:a.id,fec:a.fec,can:a.can,des:a.des,has:a.has,tipo:a.tipo,detalle:a.detalle};});
+    acts=actRows.map(function(a){return{id:a.id,cli:a.cli||null,fec:a.fec,can:a.can,des:a.des,has:a.has,tipo:a.tipo,detalle:a.detalle};});
     nxAct=acts.length?Math.max.apply(null,acts.map(function(a){return a.id;}))+1:1;;
     recs=recRows.map(function(r){return{id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias||[],hasta:r.hasta,skip:r.skip||[]};});
     novs=novRows.map(function(n){return{id:n.id,tipo:n.tipo,fun:n.fun,txt:n.txt,fec:n.fec,leida:n.leida};});
