@@ -371,8 +371,8 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
       <div class="fr"><label>Máquina principal</label><select id="nmaq" onchange="nUCmaq2()"><option value="">Sin máquina</option></select></div>
       <div class="fr" id="nmaq2-row" style="display:none"><label>Accesorio / Acoplado</label><select id="nmaq2"><option value="">Sin accesorio</option></select></div>
       <div class="fr" id="nfecrow"><label>Fecha</label><input type="date" id="nfec"></div>
-      <div class="fr"><label>Desde</label><input type="time" id="ndes" value="09:00"></div>
-      <div class="fr"><label>Hasta</label><input type="time" id="nhas" value="10:00"></div>
+      <div class="fr"><label>Desde</label><input type="text" id="ndes" value="09:00" placeholder="HH:MM" maxlength="5" pattern="[0-9]{2}:[0-9]{2}" style="width:80px" oninput="fmtTime(this)"></div>
+      <div class="fr"><label>Hasta</label><input type="text" id="nhas" value="10:00" placeholder="HH:MM" maxlength="5" pattern="[0-9]{2}:[0-9]{2}" style="width:80px" oninput="fmtTime(this)"></div>
     </div>
     <div class="fr" id="ndrow" style="display:none">
       <label>Días de la semana</label>
@@ -456,6 +456,7 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
       <button onclick="editTask()"><i class="ti ti-pencil"></i> Editar</button>
       <button onclick="CM3('mdet')">Cerrar</button>
       <button class="bp" id="bdone" onclick="MDone()"><i class="ti ti-check"></i> Completar</button>
+      <button id="bundone" onclick="MUndone()" style="display:none;background:var(--orange);color:#fff;border:none;border-radius:var(--br);padding:7px 14px;font-size:13px;cursor:pointer;font-family:inherit"><i class="ti ti-arrow-back-up"></i> Deshacer</button>
     </div>
   </div>
 </div>
@@ -661,6 +662,11 @@ let cMon=gMon(new Date()),cTab='semana';
 let cMonth=new Date().getMonth(),cYear=new Date().getFullYear();
 let cMonthR=new Date().getMonth(),cYearR=new Date().getFullYear();
 let selId=null,editingId=null,isRec=false,dragId=null;
+function fmtTime(el){
+  var v=el.value.replace(/[^0-9]/g,'');
+  if(v.length>=3)v=v.substring(0,2)+':'+v.substring(2,4);
+  el.value=v;
+}
 function getMSelVals(dropId){
   var drop=document.getElementById(dropId);
   if(!drop)return[];
@@ -1240,17 +1246,16 @@ function renderCanchaView(){
 
   // Rows per cancha
   canchas.forEach(function(can){
-    h+='<tr><td style="background:var(--bg2);border:0.5px solid var(--bo);padding:6px 10px;font-weight:600;position:sticky;left:0;z-index:1">'+can+'</td>';
+    h+='<tr style="border-top:2px solid var(--bo2)"><td style="background:var(--bg2);border:0.5px solid var(--bo);border-top:2px solid var(--bo2);padding:6px 10px;font-weight:700;font-size:12px;position:sticky;left:0;z-index:1">'+can+'</td>';
     days.forEach(function(d){
       var ds=fD(d);
       var cellTasks=weekTasks.filter(function(t){return t.fec===ds&&t.can===can;});
       var cellActs=weekActs.filter(function(a){return a.fec===ds&&a.can===can;});
-      // Merge tasks and acts, sort by start time
       var cellItems=[];
       cellTasks.forEach(function(t){cellItems.push({type:'task',des:t.des,data:t});});
       cellActs.forEach(function(a){cellItems.push({type:'act',des:a.des.substring(0,5),data:a});});
       cellItems.sort(function(a,b){return a.des.localeCompare(b.des);});
-      h+='<td style="border:0.5px solid var(--bo);padding:4px;vertical-align:top;min-height:40px">';
+      h+='<td style="border:0.5px solid var(--bo);border-top:2px solid var(--bo2);padding:4px;vertical-align:top;min-height:40px">';
       cellItems.forEach(function(item){
         if(item.type==='task'){
           var t=item.data;
@@ -2110,11 +2115,25 @@ function OD(id){
     (t.obs?'<dt>Observaciones</dt><dd>'+t.obs+'</dd>':'');
   var done=t.est==='completada';
   document.getElementById('bdone').style.display=done?'none':'';
+  var bundoneEl=document.getElementById('bundone');
+  if(bundoneEl)bundoneEl.style.display=done?'':'none';
   document.getElementById('dobsrow').style.display=done?'none':'';
   document.getElementById('dobs').value='';
   document.getElementById('mdet').style.display='flex';
 }
 function editTask(){CM3('mdet');ONT(false,selId);}
+function MUndone(){
+  var t=tasks.find(function(x){return x.id===selId;});
+  if(!t||t.est!=='completada')return;
+  if(!confirm('¿Volver esta tarea a pendiente?'))return;
+  t.est='pendiente';
+  t.hsFin=null;
+  t.obs='';
+  saveTaskToSupabase(t);
+  CM3('mdet');
+  try{saveState();}catch(e){}
+  render();
+}
 function MDone(){
   var t=tasks.find(function(x){return x.id===selId;});
   if(t){
