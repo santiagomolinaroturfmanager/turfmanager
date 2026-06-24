@@ -253,6 +253,10 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
     <span id="wlbl"></span>
     <button onclick="CW(1)"><i class="ti ti-chevron-right"></i></button>
     <button onclick="GTd()" style="font-size:11px;padding:3px 8px">Hoy</button>
+    <div style="display:flex;border:0.5px solid var(--bo2);border-radius:var(--br);overflow:hidden;margin-left:8px">
+      <button id="vw-hora" onclick="setCalView('hora')" style="font-size:11px;padding:3px 10px;border:none;background:var(--blue);color:#fff;cursor:pointer;font-family:inherit">⏰ Horario</button>
+      <button id="vw-cancha" onclick="setCalView('cancha')" style="font-size:11px;padding:3px 10px;border:none;background:var(--bg2);color:var(--tx2);cursor:pointer;font-family:inherit">🏟 Cancha</button>
+    </div>
   </div>
   <span id="save-indicator" style="font-size:11px;color:#27500A;min-width:70px;text-align:right"></span>
   <button class="btn primary" id="btnadd" onclick="ONT(false)"><i class="ti ti-plus"></i> Nueva tarea</button>
@@ -880,6 +884,7 @@ function gFilt(){
   });
 }
 function render(){
+  if(typeof _calView!=='undefined'&&_calView==='cancha'){setTimeout(renderCanchaView,50);return;}
   const tod=fD(new Date()),sun=aD(cMon,6),op={month:'short',day:'numeric'};
   document.getElementById('wlbl').textContent=cMon.toLocaleDateString('es-UY',op)+' – '+sun.toLocaleDateString('es-UY',op);
   const fil=gFilt();
@@ -940,7 +945,25 @@ function render(){
   h+=`</div></div>`;
   const leg=clientes.map(c=>`<span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--tx2)"><span style="width:9px;height:9px;border-radius:2px;background:${c.bg};border:1px solid ${c.tx}"></span>${c.nombre}</span>`).join('');
   h+=`<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px">${leg}</div>`;
-  document.getElementById('tab-semana').innerHTML=h;
+  // Auto-reset cancha view if no single client selected
+  if(typeof _calView!=='undefined'&&_calView==='cancha'){
+    var cliValsCheck=getMSelVals('msel-cli-drop');
+    if(cliValsCheck.length!==1){
+      _calView='hora';
+      var bh=document.getElementById('vw-hora'),bc=document.getElementById('vw-cancha');
+      if(bh){bh.style.background='var(--blue)';bh.style.color='#fff';}
+      if(bc){bc.style.background='var(--bg2)';bc.style.color='var(--tx2)';}
+    }
+  }
+  var isCanchaView=typeof _calView!=='undefined'&&_calView==='cancha';
+  var semanaEl=document.getElementById('tab-semana');
+  if(!semanaEl)return;
+  if(isCanchaView){
+    semanaEl.innerHTML='<div id="cal-cancha-inner"></div>';
+    renderCanchaView();
+  } else {
+    semanaEl.innerHTML=h;
+  }
 }
 function setRain(fec,val){const v=parseFloat(val)||0;if(v>0)lluviaData[fec]=v;else delete lluviaData[fec];}
 function openRainModal(){document.getElementById('rain-fec').value=fD(new Date());document.getElementById('rain-mm').value='';document.getElementById('mrain').style.display='flex';}
@@ -1156,6 +1179,105 @@ function renderAct(){
   });
   h+='</div>';
   ct.innerHTML=h;
+}
+
+// ── CALENDAR VIEW TOGGLE ──────────────────────────────────
+var _calView='hora';
+function setCalView(v){
+  // Only allow cancha view with exactly 1 client selected
+  if(v==='cancha'){
+    var cliVals=getMSelVals('msel-cli-drop');
+    if(cliVals.length!==1){
+      alert('Seleccioná exactamente 1 cliente para usar la vista por cancha');
+      return;
+    }
+  }
+  _calView=v;
+  var bh=document.getElementById('vw-hora'),bc=document.getElementById('vw-cancha');
+  if(bh){bh.style.background=v==='hora'?'var(--blue)':'var(--bg2)';bh.style.color=v==='hora'?'#fff':'var(--tx2)';}
+  if(bc){bc.style.background=v==='cancha'?'var(--blue)':'var(--bg2)';bc.style.color=v==='cancha'?'#fff':'var(--tx2)';}
+  render();
+}
+
+function renderCanchaView(){
+  var ct=document.getElementById('cal-cancha-inner')||document.getElementById('tab-semana');if(!ct)return;
+  var days=[];
+  for(var i=0;i<7;i++){var d=new Date(cMon);d.setDate(d.getDate()+i);days.push(d);}
+  var DIAS=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+  var today=fD(new Date());
+
+  // Get all canchas from filtered tasks + actividades this week
+  var cliVals=getMSelVals('msel-cli-drop');
+  var funVals=getMSelVals('msel-fun-drop');
+  var estVals=getMSelVals('msel-est-drop');
+  var weekFecs=days.map(function(d){return fD(d);});
+
+  var weekTasks=gFilt().filter(function(t){return weekFecs.indexOf(t.fec)>=0;});
+  var weekActs=acts.filter(function(a){
+    if(weekFecs.indexOf(a.fec)<0)return false;
+    if(cliVals.length&&a.cli&&cliVals.indexOf(String(a.cli))<0)return false;
+    return true;
+  });
+
+  // Collect all canchas
+  var canchaSet={};
+  weekTasks.forEach(function(t){if(t.can)canchaSet[t.can]=true;});
+  weekActs.forEach(function(a){if(a.can)canchaSet[a.can]=true;});
+  var canchas=Object.keys(canchaSet).sort();
+  if(!canchas.length){ct.innerHTML='<div class="empty">Sin tareas esta semana</div>';return;}
+
+  // Build table
+  var BMAP={pendiente:'var(--blue)',en_curso:'var(--orange)',completada:'var(--green)'};
+  var h='<table style="width:100%;border-collapse:collapse;font-size:11px;min-width:700px">';
+  // Header
+  h+='<thead><tr><th style="background:var(--bg2);border:0.5px solid var(--bo);padding:6px 10px;min-width:80px;position:sticky;left:0;z-index:2">Cancha</th>';
+  days.forEach(function(d,i){
+    var ds=fD(d);var isToday=ds===today;
+    h+='<th style="background:'+(isToday?'var(--blue)':'var(--bg2)')+';color:'+(isToday?'#fff':'var(--tx)')+';border:0.5px solid var(--bo);padding:6px 8px;min-width:130px;text-align:center">';
+    h+=DIAS[i]+'<br><span style="font-size:10px;opacity:.8">'+String(d.getDate()).padStart(2,'0')+'/'+(d.getMonth()+1)+'</span></th>';
+  });
+  h+='</tr></thead><tbody>';
+
+  // Rows per cancha
+  canchas.forEach(function(can){
+    h+='<tr><td style="background:var(--bg2);border:0.5px solid var(--bo);padding:6px 10px;font-weight:600;position:sticky;left:0;z-index:1">'+can+'</td>';
+    days.forEach(function(d){
+      var ds=fD(d);
+      var cellTasks=weekTasks.filter(function(t){return t.fec===ds&&t.can===can;});
+      var cellActs=weekActs.filter(function(a){return a.fec===ds&&a.can===can;});
+      // Merge tasks and acts, sort by start time
+      var cellItems=[];
+      cellTasks.forEach(function(t){cellItems.push({type:'task',des:t.des,data:t});});
+      cellActs.forEach(function(a){cellItems.push({type:'act',des:a.des.substring(0,5),data:a});});
+      cellItems.sort(function(a,b){return a.des.localeCompare(b.des);});
+      h+='<td style="border:0.5px solid var(--bo);padding:4px;vertical-align:top;min-height:40px">';
+      cellItems.forEach(function(item){
+        if(item.type==='task'){
+          var t=item.data;
+          var bg=cBG(t.cli)||'var(--blue)';
+          var tx=cTX(t.cli)||'#fff';
+          h+='<div onclick="OD('+t.id+')" style="background:'+bg+';color:'+tx+';border-radius:4px;padding:3px 6px;margin-bottom:3px;cursor:pointer;font-size:10px">';
+          h+='<div style="font-weight:600">'+t.tar+'</div>';
+          h+='<div style="opacity:.85">'+t.des+'-'+t.has+'</div>';
+          if(t.funs&&t.funs.length)h+='<div style="opacity:.7">'+t.funs.map(function(f){return f.split(' ')[0];}).join(', ')+'</div>';
+          h+='</div>';
+        } else {
+          var a=item.data;
+          var actBg={practica:'#3B6D11',partido:'#A32D2D',amistoso:'#7A5C00'};
+          var bg2=actBg[a.tipo]||'#555';
+          h+='<div style="background:'+bg2+';color:#fff;border-radius:4px;padding:3px 6px;margin-bottom:3px;font-size:10px;opacity:0.85">';
+          h+='<div style="font-weight:600">⚽ '+a.detalle+'</div>';
+          h+='<div>'+a.des.substring(0,5)+'-'+a.has.substring(0,5)+'</div>';
+          h+='</div>';
+        }
+      });
+      h+='</td>';
+    });
+    h+='</tr>';
+  });
+  h+='</tbody></table>';
+  var inner=document.getElementById('cal-cancha-inner');
+  (inner||ct).innerHTML=h;
 }
 
 function dcClick(e,ds,hn){
@@ -1448,7 +1570,21 @@ async function renderReg(){
     const data={};for(let d=1;d<=dim;d++)data[d]=null;
     if(row.key==='_lluvia'){for(let d=1;d<=dim;d++){const ds=`${cYear}-${String(cMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;if(lluviaData[ds])data[d]=lluviaData[ds];}return data;}
     if(row.key==='_temp'){for(let d=1;d<=dim;d++){const ds=`${cYear}-${String(cMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;if(tempData[ds]!==undefined)data[d]=tempData[ds];}return data;}
-    mt.forEach(t=>{if(t.tar!==row.key)return;const day=new Date(t.fec+'T12:00').getDate();data[day]=(data[day]||0)+1;});
+    mt.forEach(t=>{
+      if(t.tar!==row.key)return;
+      const day=new Date(t.fec+'T12:00').getDate();
+      if(row.key==='Riego'){
+        // Calculate mm: duration in hours * 2.25mm/hr
+        var desParts=t.des.split(':'),hasParts=t.has.split(':');
+        var minDes=parseInt(desParts[0])*60+parseInt(desParts[1]||0);
+        var minHas=parseInt(hasParts[0])*60+parseInt(hasParts[1]||0);
+        var hrs=(minHas-minDes)/60;
+        var mm=parseFloat((hrs*2.25).toFixed(2));
+        data[day]=(data[day]||0)+mm;
+      } else {
+        data[day]=(data[day]||0)+1;
+      }
+    });
     return data;
   }
   function gtot(row,data){
@@ -1474,14 +1610,16 @@ async function renderReg(){
       const val=data[d];const hasVal=val!==null&&val!==undefined;
       let cls='dc2'+(we?' we':'');
       let content='';
+      var isRiego=row.key==='Riego';
       if(hasVal){
         if(isRain){cls+=' rv';content=val;}
         else if(isTemp){cls+=' tv';content=val!==null?Math.round(val):'—';}
+        else if(isRiego&&val>0){cls+=' hv';content=val.toFixed(2)+'mm';}
         else if(val>0){cls+=' hv';content='x';}
       }
       h+=`<td class="${cls}">${content}</td>`;
     }
-    const td=tot!==null?(isRain?`${tot}mm`:isTemp?`${tot}°C`:tot):'';
+    const td=tot!==null?(isRain?`${tot}mm`:isTemp?`${tot}°C`:row.key==='Riego'?`${typeof tot==='number'?tot.toFixed(2):tot}mm`:tot):'';
     h+=`<td class="tot2">${td}</td></tr>`;
   });
   h+=`</tbody></table></div>`;
