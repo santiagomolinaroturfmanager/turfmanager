@@ -1256,8 +1256,10 @@ function renderCanchaView(){
           var t=item.data;
           var bg=cBG(t.cli)||'var(--blue)';
           var tx=cTX(t.cli)||'#fff';
-          h+='<div onclick="OD('+t.id+')" style="background:'+bg+';color:'+tx+';border-radius:4px;padding:3px 6px;margin-bottom:3px;cursor:pointer;font-size:10px">';
-          h+='<div style="font-weight:600">'+t.tar+'</div>';
+          var opac=t.est==='completada'?'0.35':t.est==='en_curso'?'0.75':'1';
+          var strike=t.est==='completada'?'text-decoration:line-through;':'';
+          h+='<div onclick="OD('+t.id+')" style="background:'+bg+';color:'+tx+';border-radius:4px;padding:3px 6px;margin-bottom:3px;cursor:pointer;font-size:10px;opacity:'+opac+'">';
+          h+='<div style="font-weight:600;'+strike+'">'+t.tar+'</div>';
           h+='<div style="opacity:.85">'+t.des+'-'+t.has+'</div>';
           if(t.funs&&t.funs.length)h+='<div style="opacity:.7">'+t.funs.map(function(f){return f.split(' ')[0];}).join(', ')+'</div>';
           h+='</div>';
