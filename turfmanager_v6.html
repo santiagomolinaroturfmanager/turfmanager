@@ -243,6 +243,7 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
     <button onclick="ST('reg')">📋 Registro</button>
     <button onclick="ST('resumen')">📊 Resumen</button>
     <button onclick="ST('maq')">⚙️ Maquinaria</button>
+    <button onclick="ST('act')">⚽ Actividades</button>
     <button onclick="ST('alr')">Alertas <span id="alrbadge" style="display:none;background:#E8A838;color:#fff;border-radius:9px;padding:0 5px;font-size:9px;margin-left:2px"></span></button>
     <button onclick="ST('rec')">Recurrentes</button>
     <button onclick="ST('cfg')">Ajustes</button>
@@ -313,7 +314,14 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
     <div id="reg-weather-bar" style="display:none"></div>
     <div id="reg-ct"></div>
   </div>
-  <div id="tab-resumen" style="display:none">
+  <div id="tab-act" style="display:none">
+  <div class="sec-head">
+    <h2><i class="ti ti-ball-football" style="vertical-align:-2px;margin-right:4px"></i>Actividades Deportivas</h2>
+    <button class="bp" onclick="openActModal()"><i class="ti ti-plus"></i> Nueva actividad</button>
+  </div>
+  <div id="act-ct"></div>
+</div>
+<div id="tab-resumen" style="display:none">
     <div class="sec-head">
       <h2><i class="ti ti-chart-bar" style="vertical-align:-2px;margin-right:4px"></i>Resumen mensual</h2>
       <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
@@ -404,6 +412,31 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
   </div>
 </div>
 
+<!-- MODAL ACTIVIDAD -->
+<div id="mact" style="display:none" class="modal-bg">
+  <div class="modal">
+    <h2 id="mact-title">Nueva actividad</h2>
+    <div class="fg">
+      <div class="fr"><label>Cancha</label>
+        <select id="act-can">
+          <option value="">Seleccionar...</option>
+        </select>
+      </div>
+      <div class="fr"><label>Tipo</label>
+        <select id="act-tipo">
+          <option value="practica">Práctica</option>
+          <option value="partido">Partido</option>
+          <option value="amistoso">Amistoso</option>
+        </select>
+      </div>
+      <div class="fr"><label>Detalle</label><input type="text" id="act-detalle" placeholder="Ej: 1era Práctica, Partido SUB-17 vs Danubio"></div>
+      <div class="fr"><label>Fecha</label><input type="date" id="act-fec"></div>
+      <div class="fr"><label>Desde</label><input type="time" id="act-des" value="09:00"></div>
+      <div class="fr"><label>Hasta</label><input type="time" id="act-has" value="11:00"></div>
+    </div>
+    <div class="ma"><button onclick="CM3('mact')">Cancelar</button><button class="bp" onclick="saveAct()">Guardar</button></div>
+  </div>
+</div>
 <!-- MODAL DETALLE JEFE -->
 <div id="mdet" style="display:none" class="modal-bg">
   <div class="modal">
@@ -716,7 +749,7 @@ function getPlanRows(isSint){var tarList=isSint?tiposTareaSint:tiposTarea;var ba
 // ================================================================
 function ST(t){
   cTab=t;
-  const tabs=['semana','nov','reg','resumen','maq','alr','rec','cfg'];
+  const tabs=['semana','nov','reg','resumen','maq','act','alr','rec','cfg'];
   tabs.forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.style.display=x===t?'':'none';});
   document.querySelectorAll('.nav button').forEach((b,i)=>b.className=tabs[i]===t?'on':'');
   document.getElementById('fb').style.display=t==='semana'?'flex':'none';
@@ -728,6 +761,7 @@ function ST(t){
   if(t==='nov')RN();
   if(t==='maq')renderMaq();
   if(t==='alr')renderAlr();
+  if(t==='act')renderAct();
   if(t==='cfg')renderCfg();
   if(t==='resumen')renderResumen();
 }
@@ -866,6 +900,17 @@ function render(){
         var maqLabel=(t.maq?(t.maq+(t.maq2?' + '+t.maq2:'')):'');
         var f24=function(h){if(!h)return h;var p=h.split(':');return String(parseInt(p[0])).padStart(2,'0')+':'+(p[1]||'00');};
         h+='<span>'+f24(t.des)+'-'+f24(t.has)+(maqLabel?' · '+maqLabel:'')+'</span>';
+        h+='</div>';
+      });
+      // Actividades deportivas chips
+      var actCell=acts.filter(function(a){return a.fec===ds&&parseInt(a.des.split(':')[0])===hn;});
+      actCell.forEach(function(a){
+        var actBg={practica:'#3B6D11',partido:'#A32D2D',amistoso:'#7A5C00'};
+        var bg2=actBg[a.tipo]||'#555';
+        var f24b=function(hh){if(!hh)return hh;var p=hh.split(':');return String(parseInt(p[0])).padStart(2,'0')+':'+(p[1]||'00');};
+        h+='<div class="chip" style="background:'+bg2+';color:#fff;opacity:0.85;cursor:default;pointer-events:none">';
+        h+='<b>⚽ '+a.can+'</b>';
+        h+='<span>'+f24b(a.des)+'-'+f24b(a.has)+' · '+a.detalle+'</span>';
         h+='</div>';
       });
       h+=`</div>`;
@@ -1007,6 +1052,88 @@ function toggleSvcRec(){
     document.querySelectorAll('#ndp-svc .dbt').forEach(function(b){b.classList.remove('sel');});
   }
 }
+// ── ACTIVIDADES DEPORTIVAS ──────────────────────────────────
+var acts=[];
+var nxAct=1;
+var _editActId=null;
+
+function openActModal(id){
+  _editActId=id||null;
+  var a=id?acts.find(function(x){return x.id===id;}):null;
+  document.getElementById('mact-title').textContent=a?'Editar actividad':'Nueva actividad';
+  // Populate canchas
+  var sel=document.getElementById('act-can');
+  sel.innerHTML='<option value="">Seleccionar...</option>';
+  var canchas=['Cancha 1','Cancha 2','Cancha 3','Cancha 4','Cancha 5','Sintético'];
+  // Also get canchas from clientes
+  clientes.forEach(function(c){if(c.canchas)c.canchas.forEach(function(cn){if(canchas.indexOf(cn)<0)canchas.push(cn);});});
+  canchas.forEach(function(cn){var o=document.createElement('option');o.value=cn;o.textContent=cn;if(a&&a.can===cn)o.selected=true;sel.appendChild(o);});
+  document.getElementById('act-tipo').value=a?a.tipo:'practica';
+  document.getElementById('act-detalle').value=a?a.detalle:'';
+  document.getElementById('act-fec').value=a?a.fec:fD(new Date());
+  document.getElementById('act-des').value=a?a.des:'09:00';
+  document.getElementById('act-has').value=a?a.has:'11:00';
+  document.getElementById('mact').style.display='flex';
+}
+
+function saveAct(){
+  var can=document.getElementById('act-can').value;
+  var tipo=document.getElementById('act-tipo').value;
+  var detalle=document.getElementById('act-detalle').value.trim();
+  var fec=document.getElementById('act-fec').value;
+  var des=document.getElementById('act-des').value;
+  var has=document.getElementById('act-has').value;
+  if(!can||!detalle||!fec){alert('Completá todos los campos');return;}
+  var row={id:_editActId||nxAct++,fec:fec,can:can,des:des,has:has,tipo:tipo,detalle:detalle};
+  if(_editActId){
+    var idx=acts.findIndex(function(x){return x.id===_editActId;});
+    if(idx>=0)acts[idx]=row;
+  } else {
+    acts.push(row);
+  }
+  // Save to Supabase
+  sbUpsert('actividades',[row]).catch(function(e){console.warn('saveAct error',e);});
+  CM3('mact');
+  renderAct();
+  // Also update calendar view
+  render();
+}
+
+function deleteAct(id){
+  if(!confirm('¿Eliminar esta actividad?'))return;
+  acts=acts.filter(function(x){return x.id!==id;});
+  fetch(SB_URL+'/rest/v1/actividades?id=eq.'+id,{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).catch(function(e){console.warn('deleteAct error',e);});
+  renderAct();
+  render();
+}
+
+function renderAct(){
+  var ct=document.getElementById('act-ct');if(!ct)return;
+  // Group by week
+  var sorted=[...acts].sort(function(a,b){return a.fec.localeCompare(b.fec)||a.des.localeCompare(b.des);});
+  if(!sorted.length){ct.innerHTML='<div style="color:var(--tx3);padding:24px;text-align:center">No hay actividades cargadas</div>';return;}
+  var tipoBg={practica:'#E2EFDA',partido:'#FCE4D6',amistoso:'#FFF2CC'};
+  var tipoLabel={practica:'Práctica',partido:'Partido',amistoso:'Amistoso'};
+  var h='<div style="display:flex;flex-direction:column;gap:8px;padding:16px">';
+  sorted.forEach(function(a){
+    var d=new Date(a.fec+'T12:00');
+    var dias=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+    var fechaStr=dias[d.getDay()]+' '+String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0');
+    var bg=tipoBg[a.tipo]||'#f5f5f5';
+    h+='<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:'+bg+';border-radius:var(--br);border:0.5px solid var(--bo)">';
+    h+='<div style="font-size:11px;font-weight:600;color:var(--tx2);min-width:70px">'+fechaStr+'</div>';
+    h+='<div style="font-size:11px;color:var(--tx3);min-width:100px">'+a.des+' – '+a.has+'</div>';
+    h+='<div style="font-size:11px;font-weight:600;min-width:60px">'+a.can+'</div>';
+    h+='<div style="font-size:12px;flex:1">'+a.detalle+'</div>';
+    h+='<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(0,0,0,.08)">'+tipoLabel[a.tipo]+'</span>';
+    h+='<button onclick="openActModal('+a.id+')" style="border:none;background:none;cursor:pointer;color:var(--tx3);padding:2px 6px"><i class="ti ti-pencil"></i></button>';
+    h+='<button onclick="deleteAct('+a.id+')" style="border:none;background:none;cursor:pointer;color:var(--red);padding:2px 6px"><i class="ti ti-trash"></i></button>';
+    h+='</div>';
+  });
+  h+='</div>';
+  ct.innerHTML=h;
+}
+
 function dcClick(e,ds,hn){
   // Only fire if click was on empty space (not on a chip)
   if(e.target.closest('.chip'))return;
@@ -2539,7 +2666,10 @@ async function loadFromSupabase(){
     clientes=cliRows;
     funcionarios=funRows;
     maquinas=maqRows.map(function(m){return{id:m.id,nombre:m.nombre,tipo:m.tipo,marca:m.marca||'',cat:m.cat||'general',scope:m.scope,cliId:m.cli_id,hs:m.hs,intervalo:m.intervalo,proximo:m.proximo,tareas:m.tareas||[],svcTareas:m.svc_tareas||[],hist:m.hist||[]};});
-    tasks=tarRows.map(function(t){return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',recId:t.rec_id,chk:t.chk||{},hsIni:t.hs_ini,hsFin:t.hs_fin};});
+    tasks=tarRows.map(function(t){return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',recId:t.rec_id,chk:t.chk||{},hsIni:t.hs_ini,hsFin:t.hs_fin};})
+    var actRows=await sbGet('actividades','select=*&order=fec,des');
+    acts=actRows.map(function(a){return{id:a.id,fec:a.fec,can:a.can,des:a.des,has:a.has,tipo:a.tipo,detalle:a.detalle};});
+    nxAct=acts.length?Math.max.apply(null,acts.map(function(a){return a.id;}))+1:1;;
     recs=recRows.map(function(r){return{id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias||[],hasta:r.hasta,skip:r.skip||[]};});
     novs=novRows.map(function(n){return{id:n.id,tipo:n.tipo,fun:n.fun,txt:n.txt,fec:n.fec,leida:n.leida};});
     alertas=alrRows.map(function(a){return{id:a.id,desc:a.descripcion,tipo:a.tipo,dias:a.dias,ref:a.ref||'',ctx:a.ctx||'',notes:a.notes||'',fecha:a.fecha||'',estado:a.estado,leida:a.leida};});

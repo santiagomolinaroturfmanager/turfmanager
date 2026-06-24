@@ -200,7 +200,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg3);min-he
 
 <script>
 // ── DATA ──────────────────────────────────────────────────────
-var clientes=[], funcionarios=[], tasks=[], recs=[], checklists={}, maquinas=[], novs=[];
+var clientes=[], funcionarios=[], tasks=[], recs=[], checklists={}, maquinas=[], novs=[], acts=[];
 var nxNov=1;
 const SB_URL='https://kkuhghsmoxlcuhhpzkll.supabase.co';
 const SB_KEY='sb_publishable_DW9Wvf4kOHMOBo-aA-W3tw_jjafLqPA';
@@ -277,6 +277,8 @@ async function loadData(){
     funcionarios=funRows;
     maquinas=maqRows.map(function(m){return{id:m.id,nombre:m.nombre,tipo:m.tipo,marca:m.marca||'',cat:m.cat||'general',scope:m.scope,cliId:m.cli_id,hs:m.hs,intervalo:m.intervalo,proximo:m.proximo,tareas:m.tareas||[],svcTareas:m.svc_tareas||[],hist:m.hist||[]};});
     tasks=tarRows.map(function(t){return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',recId:t.rec_id,chk:t.chk||{},hsIni:t.hs_ini,hsFin:t.hs_fin,tsIni:t.ts_ini};});
+    var actRows=await sbGet('actividades','select=*&order=fec,des');
+    acts=actRows.map(function(a){return{id:a.id,fec:a.fec,can:a.can,des:a.des,has:a.has,tipo:a.tipo,detalle:a.detalle};});
     recs=recRows.map(function(r){return{id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias||[],hasta:r.hasta,skip:r.skip||[]};});
     cfgRows.forEach(function(c){if(c.clave==='checklists')checklists=c.valor;});
     if(tasks.length)nxNov=Math.max.apply(null,tasks.map(function(x){return x.id;}))+1;
@@ -496,15 +498,32 @@ function renderDia(){
 
   var el=document.getElementById('main-content');
   if(!myTasks.length){
-    el.innerHTML='<div style="font-size:13px;font-weight:600;color:var(--tx2);margin-bottom:16px">'+dayLabel+'</div>'
-      +'<div class="empty"><i class="ti ti-calendar-check"></i>'+(isToday?'No tenés tareas para hoy':'Sin tareas este día')+'</div>';
-    return;
+    var dayActsCheck=acts.filter(function(a){return a.fec===cDay;});
+    if(!dayActsCheck.length){
+      el.innerHTML='<div style="font-size:13px;font-weight:600;color:var(--tx2);margin-bottom:16px">'+dayLabel+'</div>'
+        +'<div class="empty"><i class="ti ti-calendar-check"></i>'+(isToday?'No tenés tareas para hoy':'Sin tareas este día')+'</div>';
+      return;
+    }
   }
 
   var h='<div style="font-size:13px;font-weight:600;color:var(--tx2);margin-bottom:16px">'+dayLabel+'</div>';
   myTasks.forEach(function(t){
     h+=renderTaskCard(t);
   });
+  // Actividades deportivas del día
+  var dayActs=acts.filter(function(a){return a.fec===cDay;}).sort(function(a,b){return a.des.localeCompare(b.des);});
+  if(dayActs.length){
+    h+='<div style="font-size:12px;font-weight:600;color:var(--tx2);margin:16px 0 8px;text-transform:uppercase;letter-spacing:.3px">⚽ Actividades en canchas</div>';
+    dayActs.forEach(function(a){
+      var actBg={practica:'#3B6D11',partido:'#A32D2D',amistoso:'#7A5C00'};
+      var bg2=actBg[a.tipo]||'#555';
+      h+='<div style="background:'+bg2+';color:#fff;border-radius:12px;padding:12px 16px;margin-bottom:8px">';
+      h+='<div style="font-weight:600;font-size:15px">'+a.can+'</div>';
+      h+='<div style="font-size:13px;margin-top:4px">'+a.des+' – '+a.has+'</div>';
+      h+='<div style="font-size:13px;margin-top:2px">'+a.detalle+'</div>';
+      h+='</div>';
+    });
+  }
   el.innerHTML=h;
 }
 
