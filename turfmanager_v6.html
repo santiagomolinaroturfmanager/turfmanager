@@ -907,9 +907,19 @@ function render(){
       });
       // Actividades deportivas chips
       var cliVals=getMSelVals('msel-cli-drop');
+      var funVals=getMSelVals('msel-fun-drop');
+      // Get clients of selected funcionarios
+      var actCliIds=[];
+      if(funVals.length){
+        funVals.forEach(function(fn){
+          var fo=funcionarios.find(function(f){return f.nombre===fn;});
+          if(fo&&fo.clientes)fo.clientes.forEach(function(cid){if(actCliIds.indexOf(cid)<0)actCliIds.push(cid);});
+        });
+      }
       var actCell=acts.filter(function(a){
         if(a.fec!==ds||parseInt(a.des.split(':')[0])!==hn)return false;
         if(cliVals.length&&a.cli&&cliVals.indexOf(String(a.cli))<0)return false;
+        if(actCliIds.length&&a.cli&&actCliIds.indexOf(a.cli)<0)return false;
         return true;
       });
       actCell.forEach(function(a){

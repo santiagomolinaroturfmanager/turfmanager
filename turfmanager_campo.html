@@ -500,7 +500,7 @@ function renderDia(){
   if(!myTasks.length){
     var dayActsCheck=acts.filter(function(a){
     if(a.fec!==cDay)return false;
-    if(!isAdmin&&funCliIds&&funCliIds.length&&a.cli&&funCliIds.indexOf(a.cli)<0)return false;
+    if(funCliIds&&funCliIds.length&&a.cli&&funCliIds.indexOf(a.cli)<0)return false;
     return true;
   });
     if(!dayActsCheck.length){
@@ -515,19 +515,16 @@ function renderDia(){
     h+=renderTaskCard(t);
   });
   // Actividades deportivas del día
-  // Show actividades for clients the funcionario works for
-  var myCliIds=clientes.filter(function(c){
-    return c.canchas&&c.canchas.length>0;
-  }).map(function(c){return c.id;});
-  // If admin, show all; if funcionario, show their clients
+  // Filter actividades by the funcionario being viewed
+  var viewFun=isAdmin?getMSelValsC('af-fun-drop')[0]:cFun;
   var funCliIds=[];
-  if(!isAdmin&&cFun){
-    var funObj=funcionarios.find(function(f){return f.nombre===cFun;});
+  if(viewFun){
+    var funObj=funcionarios.find(function(f){return f.nombre===viewFun;});
     funCliIds=funObj&&funObj.clientes?funObj.clientes:[];
   }
   var dayActs=acts.filter(function(a){
     if(a.fec!==cDay)return false;
-    if(!isAdmin&&funCliIds.length&&a.cli&&funCliIds.indexOf(a.cli)<0)return false;
+    if(funCliIds.length&&a.cli&&funCliIds.indexOf(a.cli)<0)return false;
     return true;
   }).sort(function(a,b){return a.des.localeCompare(b.des);});
   if(dayActs.length){
