@@ -487,6 +487,20 @@ function populateAdminFilters(){
     lbl.innerHTML='<input type="checkbox" value="'+c.id+'"'+(cliChecked.indexOf(String(c.id))>=0?' checked':'')+' onchange="applyMSelC()"> '+c.nombre;
     cliDrop.appendChild(lbl);
   });
+  // Populate cancha filter
+  var afCan=document.getElementById('af-can');
+  if(afCan){
+    var prevCan=afCan.value;
+    var canchas={};
+    tasks.forEach(function(t){if(t.can)canchas[t.can]=true;});
+    afCan.innerHTML='<option value="">Todas</option>';
+    Object.keys(canchas).sort().forEach(function(cn){
+      var o=document.createElement('option');
+      o.value=cn;o.textContent=cn;
+      if(prevCan===cn)o.selected=true;
+      afCan.appendChild(o);
+    });
+  }
 }
 function getAdminTasks(date){
   var funVals=getMSelValsC('af-fun-drop');
@@ -655,6 +669,23 @@ function renderSemana(){
           chip.addEventListener('touchend',function(e){touchDragEnd(e);},{passive:false});
           chip.onclick=function(e){e.stopPropagation();selectDayAndOpen(ds,t.id);};
           cell.appendChild(chip);
+        });
+        // Add actividades deportivas chips
+        var cellActs=acts.filter(function(a){
+          if(a.fec!==ds||parseInt(a.des.substring(0,2))!==hh)return false;
+          if(_ffbCan&&a.can!==_ffbCan)return false;
+          // Filter by funcionario's clients
+          var funObj3=funcionarios.find(function(f){return f.nombre===cFun;});
+          var fClis=funObj3&&funObj3.clientes?funObj3.clientes:[];
+          if(fClis.length&&a.cli&&fClis.indexOf(a.cli)<0)return false;
+          return true;
+        });
+        cellActs.forEach(function(a){
+          var actBg={practica:'#3B6D11',partido:'#A32D2D',amistoso:'#7A5C00'};
+          var actChip=document.createElement('div');
+          actChip.style.cssText='background:'+( actBg[a.tipo]||'#555')+';color:#fff;border-radius:6px;padding:4px 6px;font-size:10px;margin-bottom:3px;opacity:0.9';
+          actChip.textContent='⚽ '+a.can+' '+a.des.substring(0,5);
+          cell.appendChild(actChip);
         });
         grid.appendChild(cell);
       })(i,hh);

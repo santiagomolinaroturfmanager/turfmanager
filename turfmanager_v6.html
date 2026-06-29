@@ -281,6 +281,15 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
       <label class="msel-item"><input type="checkbox" value="completada" onchange="applyMSel()"> Completada</label>
     </div>
   </div>
+  <label>Tipo:</label>
+  <div class="msel-wrap" id="msel-tipo">
+    <button class="msel-btn" onclick="toggleMSel('msel-tipo')"><span id="msel-tipo-lbl">Todos</span> ▾</button>
+    <div class="msel-drop" id="msel-tipo-drop">
+      <label class="msel-item"><input type="checkbox" value="canchas" onchange="applyMSel()"> 🌿 Mant. Canchas</label>
+      <label class="msel-item"><input type="checkbox" value="maquinaria" onchange="applyMSel()"> ⚙️ Mant. Maquinaria</label>
+      <label class="msel-item"><input type="checkbox" value="actividad" onchange="applyMSel()"> ⚽ Actividad deportiva</label>
+    </div>
+  </div>
   <button class="btn sm" onclick="clearMSel()">✕ Limpiar</button>
 </div>
 <div class="content">
@@ -364,7 +373,7 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
     <div id="ntipo-canchas-sec">
     <div class="fg">
       <div class="fr"><label>Cliente</label><select id="ncli" onchange="nUC()"><option value="">Seleccionar...</option></select></div>
-      <div class="fr"><label>Cancha</label><select id="ncan"><option value="">—</option></select></div>
+      <div class="fr"><label>Cancha</label><select id="ncan" onchange="nUC()"><option value="">—</option></select></div>
       <div class="fr"><label>Tarea</label><select id="ntar" onchange="nUC()"></select></div>
       <div class="fr" style="grid-column:span 2"><label>Funcionarios <span style="font-weight:400;color:var(--tx3)">(uno o mas)</span></label><div id="nfun-checks" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;min-height:32px"></div></div>
       <div id="cfl-warn" style="display:none;grid-column:span 2;background:#FCEBEB;border:0.5px solid #F09595;border-radius:var(--br);padding:8px 12px;font-size:12px;color:var(--red);margin-top:-5px"></div>
@@ -397,7 +406,7 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
       <div class="fr" id="ndrow-svc" style="display:none">
         <label>Días de la semana</label>
         <div class="dp" id="ndp-svc">
-          <button class="dbt" onclick="this.classList.toggle('sel')" data-d="1">Lu</button><button class="dbt" onclick="this.classList.toggle('sel')" data-d="2">Ma</button><button class="dbt" onclick="this.classList.toggle('sel')" data-d="3">Mi</button><button class="dbt" onclick="this.classList.toggle('sel')" data-d="4">Ju</button><button class="dbt" onclick="this.classList.toggle('sel')" data-d="5">Vi</button><button class="dbt" onclick="this.classList.toggle('sel')" data-d="6">Sá</button><button class="dbt" onclick="this.classList.toggle('sel')" data-d="0">Do</button>
+          <button class="dbt" onclick="toggleSvcDay(this)" data-d="1">Lu</button><button class="dbt" onclick="toggleSvcDay(this)" data-d="2">Ma</button><button class="dbt" onclick="toggleSvcDay(this)" data-d="3">Mi</button><button class="dbt" onclick="toggleSvcDay(this)" data-d="4">Ju</button><button class="dbt" onclick="toggleSvcDay(this)" data-d="5">Vi</button><button class="dbt" onclick="toggleSvcDay(this)" data-d="6">Sá</button><button class="dbt" onclick="toggleSvcDay(this)" data-d="0">Do</button>
         </div>
         <div class="fr" style="margin-top:10px"><label>Programar hasta</label><input type="date" id="nrec-hasta-svc"></div>
       </div>
@@ -682,12 +691,15 @@ function applyMSel(){
   var cliVals=getMSelVals('msel-cli-drop');
   var funVals=getMSelVals('msel-fun-drop');
   var estVals=getMSelVals('msel-est-drop');
+  var tipoVals=getMSelVals('msel-tipo-drop');
   document.getElementById('msel-cli-lbl').textContent=cliVals.length?cliVals.length+' selec.':'Todos';
   document.getElementById('msel-fun-lbl').textContent=funVals.length?funVals.length+' selec.':'Todos';
   document.getElementById('msel-est-lbl').textContent=estVals.length?estVals.length+' selec.':'Todos';
+  document.getElementById('msel-tipo-lbl').textContent=tipoVals.length?tipoVals.length+' selec.':'Todos';
   document.querySelector('#msel-cli .msel-btn').className='msel-btn'+(cliVals.length?' active':'');
   document.querySelector('#msel-fun .msel-btn').className='msel-btn'+(funVals.length?' active':'');
   document.querySelector('#msel-est .msel-btn').className='msel-btn'+(estVals.length?' active':'');
+  document.querySelector('#msel-tipo .msel-btn').className='msel-btn'+(tipoVals.length?' active':'');
   render();
 }
 function clearMSel(){
@@ -881,11 +893,20 @@ function gFilt(){
   var cliVals=getMSelVals('msel-cli-drop');
   var funVals=getMSelVals('msel-fun-drop');
   var estVals=getMSelVals('msel-est-drop');
+  var tipoVals=getMSelVals('msel-tipo-drop');
   return tasks.filter(function(t){
     if(t.est==='cancelada')return false;
     if(cliVals.length&&cliVals.indexOf(String(t.cli))<0)return false;
     if(funVals.length&&!funVals.some(function(f){return tFuns(t).indexOf(f)>=0;}))return false;
     if(estVals.length&&estVals.indexOf(t.est)<0)return false;
+    if(tipoVals.length){
+      var esCanchas=t.tar!=='Mant. Maquinaria';
+      var esMaq=t.tar==='Mant. Maquinaria';
+      var ok=false;
+      if(tipoVals.indexOf('canchas')>=0&&esCanchas)ok=true;
+      if(tipoVals.indexOf('maquinaria')>=0&&esMaq)ok=true;
+      if(!ok)return false;
+    }
     return true;
   });
 }
@@ -1089,6 +1110,9 @@ function nLoadSvcChecks(){
     row.innerHTML='<input type="checkbox" value="'+item+'" checked style="accent-color:var(--blue);width:16px;height:16px"> <span style="font-size:13px">'+item+'</span>';
     checksEl.appendChild(row);
   });
+}
+function toggleSvcDay(btn){
+  btn.classList.toggle('sel');
 }
 function toggleSvcRec(){
   var isRec=document.getElementById('nsvc-rec').checked;
