@@ -2218,6 +2218,7 @@ function delRecTaskSolo(){
     // Mark as cancelada so GRT doesn't regenerate this date
     t.est='cancelada';
     t.recId=null;
+    saveTaskToSupabase(t);
   }
   CM3('mrec-del-task');CM3('mdet');saveState();render();
 }
