@@ -511,14 +511,23 @@ function populateAdminFilters(){
     lbl.innerHTML='<input type="checkbox" value="'+c.id+'"'+(cliChecked.indexOf(String(c.id))>=0?' checked':'')+' onchange="applyMSelC()"> '+c.nombre;
     cliDrop.appendChild(lbl);
   });
-  // Populate cancha filter
+  // Populate cancha filter — depends on selected cliente(s)
   var afCan=document.getElementById('af-can');
   if(afCan){
     var prevCan=afCan.value;
-    var canchas={};
-    tasks.forEach(function(t){if(t.can)canchas[t.can]=true;});
+    var cliValsForCan=getMSelValsC('af-cli-drop');
+    var targetClientes=cliValsForCan.length
+      ?clientes.filter(function(c){return cliValsForCan.indexOf(String(c.id))>=0;})
+      :clientes;
+    var canchasSet={};
+    targetClientes.forEach(function(c){
+      if(c.canchas)c.canchas.forEach(function(ca){
+        var nm=typeof ca==='object'?ca.nombre:ca;
+        if(nm)canchasSet[nm]=true;
+      });
+    });
     afCan.innerHTML='<option value="">Todas</option>';
-    Object.keys(canchas).sort().forEach(function(cn){
+    Object.keys(canchasSet).sort().forEach(function(cn){
       var o=document.createElement('option');
       o.value=cn;o.textContent=cn;
       if(prevCan===cn)o.selected=true;
@@ -1281,7 +1290,7 @@ function toggleMSelC(wrapId){
   document.querySelectorAll('.msel-drop.open').forEach(function(d){d.classList.remove('open');});
   if(!isOpen)drop.classList.add('open');
 }
-function applyMSelC(){render();}
+function applyMSelC(){populateAdminFilters();render();}
 function clearMSelC(){
   document.querySelectorAll('#admin-bar input[type=checkbox]').forEach(function(i){i.checked=false;});
   document.getElementById('af-fun-lbl').textContent='Todos los funcionarios';
