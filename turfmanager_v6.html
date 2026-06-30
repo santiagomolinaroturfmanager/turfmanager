@@ -406,7 +406,7 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
       <div class="fr" id="ndrow-svc" style="display:none">
         <label>Días de la semana</label>
         <div class="dp" id="ndp-svc">
-          <button class="dbt" onclick="toggleSvcDay(this)" data-d="1">Lu</button><button class="dbt" onclick="toggleSvcDay(this)" data-d="2">Ma</button><button class="dbt" onclick="toggleSvcDay(this)" data-d="3">Mi</button><button class="dbt" onclick="toggleSvcDay(this)" data-d="4">Ju</button><button class="dbt" onclick="toggleSvcDay(this)" data-d="5">Vi</button><button class="dbt" onclick="toggleSvcDay(this)" data-d="6">Sá</button><button class="dbt" onclick="toggleSvcDay(this)" data-d="0">Do</button>
+          <label class="dbt" data-d="1" style="cursor:pointer"><input type="checkbox" value="1" style="display:none" onchange="this.parentElement.classList.toggle('sel',this.checked)"> Lu</label><label class="dbt" data-d="2" style="cursor:pointer"><input type="checkbox" value="2" style="display:none" onchange="this.parentElement.classList.toggle('sel',this.checked)"> Ma</label><label class="dbt" data-d="3" style="cursor:pointer"><input type="checkbox" value="3" style="display:none" onchange="this.parentElement.classList.toggle('sel',this.checked)"> Mi</label><label class="dbt" data-d="4" style="cursor:pointer"><input type="checkbox" value="4" style="display:none" onchange="this.parentElement.classList.toggle('sel',this.checked)"> Ju</label><label class="dbt" data-d="5" style="cursor:pointer"><input type="checkbox" value="5" style="display:none" onchange="this.parentElement.classList.toggle('sel',this.checked)"> Vi</label><label class="dbt" data-d="6" style="cursor:pointer"><input type="checkbox" value="6" style="display:none" onchange="this.parentElement.classList.toggle('sel',this.checked)"> Sá</label><label class="dbt" data-d="0" style="cursor:pointer"><input type="checkbox" value="0" style="display:none" onchange="this.parentElement.classList.toggle('sel',this.checked)"> Do</label>
         </div>
         <div class="fr" style="margin-top:10px"><label>Programar hasta</label><input type="date" id="nrec-hasta-svc"></div>
       </div>
@@ -1056,7 +1056,7 @@ function SVTMaquinaria(){
   // Actually store in chk field with all items
   svcChecks.forEach(function(item){base.chk[item]=false;});
   if(isRec){
-    var dias2=[...document.querySelectorAll('#ndp-svc .dbt.sel')].map(function(b){return parseInt(b.dataset.d);});
+    var dias2=[...document.querySelectorAll('#ndp-svc input:checked')].map(function(b){return parseInt(b.value);});
     if(!dias2.length){alert('Seleccioná al menos un día');return;}
     var hasta=document.getElementById('nrec-hasta-svc').value||new Date().getFullYear()+'-12-31';
     recs.push({id:nxRec++,dias:dias2,hasta:hasta,...base,fec:fec});
@@ -1120,7 +1120,7 @@ function toggleSvcRec(){
   if(isRec){
     var y=new Date().getFullYear();
     document.getElementById('nrec-hasta-svc').value=y+'-12-31';
-    document.querySelectorAll('#ndp-svc .dbt').forEach(function(b){b.classList.remove('sel');});
+    document.querySelectorAll('#ndp-svc input').forEach(function(i){i.checked=false;});document.querySelectorAll('#ndp-svc .dbt').forEach(function(b){b.classList.remove('sel');});
   }
 }
 // ── ACTIVIDADES DEPORTIVAS ──────────────────────────────────
