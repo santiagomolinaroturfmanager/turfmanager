@@ -570,17 +570,15 @@ function renderDia(){
     :getFunFilteredTasks(tasks.filter(function(t){return t.fec===cDay&&tFuns(t).indexOf(cFun)>=0&&t.est!=='cancelada';})).sort(function(a,b){return a.des.localeCompare(b.des);});
 
   var el=document.getElementById('main-content');
-  if(!myTasks.length){
-    var dayActsCheck=acts.filter(function(a){
-    if(a.fec!==cDay)return false;
-    if(funCliIds&&funCliIds.length&&a.cli&&funCliIds.indexOf(a.cli)<0)return false;
-    return true;
-  });
-    if(!dayActsCheck.length){
-      el.innerHTML='<div style="font-size:13px;font-weight:600;color:var(--tx2);margin-bottom:16px">'+dayLabel+'</div>'
-        +'<div class="empty"><i class="ti ti-calendar-check"></i>'+(isToday?'No tenés tareas para hoy':'Sin tareas este día')+'</div>';
-      return;
-    }
+  // Check early if there's anything to show (tasks or actividades)
+  var tipoSelCheck=document.getElementById(isAdmin?'af-tipo':'ffb-tipo');
+  var tipoValCheck=tipoSelCheck?tipoSelCheck.value:'';
+  var actsForDay=acts.filter(function(a){return a.fec===cDay;});
+  var showActs=tipoValCheck!=='canchas'&&tipoValCheck!=='maquinaria'&&actsForDay.length>0;
+  if(!myTasks.length&&!showActs){
+    el.innerHTML='<div style="font-size:13px;font-weight:600;color:var(--tx2);margin-bottom:16px">'+dayLabel+'</div>'
+      +'<div class="empty"><i class="ti ti-calendar-check"></i>'+(isToday?'No tenés tareas para hoy':'Sin tareas este día')+'</div>';
+    return;
   }
 
   var h='<div style="font-size:13px;font-weight:600;color:var(--tx2);margin-bottom:16px">'+dayLabel+'</div>';
@@ -591,7 +589,7 @@ function renderDia(){
     var funObj2=funcionarios.find(function(f){return f.nombre===viewFun;});
     funCliIds=funObj2&&funObj2.clientes?funObj2.clientes:[];
   }
-  var ffbTipoSel=document.getElementById('ffb-tipo');
+  var ffbTipoSel=document.getElementById(isAdmin?'af-tipo':'ffb-tipo');
   var ffbTipoVal=ffbTipoSel?ffbTipoSel.value:'';
   var dayActs=(ffbTipoVal==='canchas'||ffbTipoVal==='maquinaria')?[]:acts.filter(function(a){
     if(a.fec!==cDay)return false;
@@ -630,7 +628,11 @@ function renderSemana(){
     var dTasks=isAdmin?getAdminTasks(ds2):getFunFilteredTasks(tasks.filter(function(t){return t.fec===ds2&&tFuns(t).indexOf(cFun)>=0&&t.est!=='cancelada';}));
     dTasks.forEach(function(t){weekTasks.push(t);});
   }
-  if(!weekTasks.length){
+  // Check if there are actividades to show even without tasks
+  var afTipoSemana=document.getElementById(isAdmin?'af-tipo':'ffb-tipo');
+  var tipoValSemana=afTipoSemana?afTipoSemana.value:'';
+  var hasActsSemana=tipoValSemana!=='canchas'&&tipoValSemana!=='maquinaria'&&acts.length>0;
+  if(!weekTasks.length&&!hasActsSemana){
     el.innerHTML='<div class="empty"><i class="ti ti-calendar"></i>Sin tareas esta semana</div>';
     return;
   }
@@ -641,6 +643,14 @@ function renderSemana(){
     if(h1<minH)minH=h1;
     if(h2+1>maxH)maxH=h2+1;
   });
+  // Also include actividades hours in range
+  if(tipoValSemana!=='canchas'&&tipoValSemana!=='maquinaria'){
+    acts.forEach(function(a){
+      var ah=parseInt(a.des.substring(0,2));
+      if(ah<minH)minH=ah;
+      if(ah+2>maxH)maxH=ah+2;
+    });
+  }
   minH=Math.max(0,minH-1);
   maxH=Math.min(23,maxH+1);
   var hours=[];
