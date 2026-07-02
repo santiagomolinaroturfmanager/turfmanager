@@ -948,7 +948,8 @@ function render(){
           if(fo&&fo.clientes)fo.clientes.forEach(function(cid){if(actCliIds.indexOf(cid)<0)actCliIds.push(cid);});
         });
       }
-      var actCell=acts.filter(function(a){
+      // Hide actividades if tipo filter excludes them
+      var actCell=(tipoVals.length&&tipoVals.indexOf('actividad')<0)?[]:acts.filter(function(a){
         if(a.fec!==ds||parseInt(a.des.split(':')[0])!==hn)return false;
         if(cliVals.length&&a.cli&&cliVals.indexOf(String(a.cli))<0)return false;
         if(actCliIds.length&&a.cli&&actCliIds.indexOf(a.cli)<0)return false;
