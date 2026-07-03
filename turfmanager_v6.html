@@ -2757,11 +2757,18 @@ function SVEditCli(){const c=clientes.find(x=>x.id===editingCliId);if(!c)return;
 function addCliente(){const nombre=document.getElementById('cfg-cli-name').value.trim();if(!nombre)return;clientes.push({id:nxCli++,nombre,bg:document.getElementById('cfg-cli-bg').value,tx:document.getElementById('cfg-cli-tx').value,canchas:[]});document.getElementById('cfg-cli-name').value='';rebuildSelects();renderCfg();}
 function delCliente(id){if(!confirm('¿Eliminar?'))return;clientes=clientes.filter(x=>x.id!==id);tasks=tasks.filter(x=>x.cli!==id);rebuildSelects();renderCfg();render();}
 var _editFunId=null;
+function saveFunToSupabase(f){
+  if(!f)return;
+  var row={id:f.id,nombre:f.nombre,username:f.username||f.nombre.split(' ')[0].toLowerCase(),password:f.password||'',clientes:f.clientes,encargado:f.encargado||false};
+  return sbUpsert('funcionarios',[row]).catch(function(e){console.warn('saveFunToSupabase error',e);});
+}
 function editFuncionario(id){
   var f=funcionarios.find(function(x){return x.id===id;});if(!f)return;
   _editFunId=id;
   document.getElementById('efun-nombre').value=f.nombre;
   document.getElementById('efun-user').value=f.username||f.nombre.split(' ')[0].toLowerCase();
+  var encEl=document.getElementById('efun-encargado');
+  if(encEl)encEl.checked=!!f.encargado;
   document.getElementById('mefun').style.display='flex';
 }
 function saveEditFun(){
@@ -2774,8 +2781,10 @@ function saveEditFun(){
   var passEl=document.getElementById('efun-pass');
   var newPass=passEl?passEl.value.trim():'';
   if(newPass)f.password=newPass;
-  // Clear field so next funcionario doesn't inherit it
   if(passEl)passEl.value='';
+  var encEl=document.getElementById('efun-encargado');
+  f.encargado=encEl?encEl.checked:false;
+  saveFunToSupabase(f);
   CM3('mefun');saveState();rebuildSelects();renderCfg();
 }
 function addFuncionario(){var nombre=document.getElementById('cfg-fun-name').value.trim();if(!nombre)return;var usernameEl=document.getElementById('cfg-fun-user');var username=usernameEl?usernameEl.value.trim().toLowerCase().replace(/\s+/g,''):'';funcionarios.push({id:nxFun++,nombre:nombre,username:username||nombre.split(' ')[0].toLowerCase(),clientes:[]});document.getElementById('cfg-fun-name').value='';if(usernameEl)usernameEl.value='';rebuildSelects();renderCfg();}
@@ -3355,7 +3364,7 @@ async function syncToSupabase(){
     ]);
     // Step 2: upsert-only for clientes/funcionarios (FK constraints prevent delete)
     if(clientes.length) await sbUpsert('clientes',clientes);
-    if(funcionarios.length) await sbUpsert('funcionarios',funcionarios.map(function(f){return{id:f.id,nombre:f.nombre,username:f.username||f.nombre.split(' ')[0].toLowerCase(),password:f.password||'',clientes:f.clientes};}));
+    if(funcionarios.length) await sbUpsert('funcionarios',funcionarios.map(function(f){return{id:f.id,nombre:f.nombre,username:f.username||f.nombre.split(' ')[0].toLowerCase(),password:f.password||'',clientes:f.clientes,encargado:f.encargado||false};}));
     setSBStatus(true);
   } catch(e){
     console.warn('Supabase sync failed:',e);
@@ -3621,6 +3630,7 @@ _mutatingFns.forEach(name => {
   <div class="fr"><label>Nombre completo</label><input type="text" id="efun-nombre"></div>
   <div class="fr"><label>Usuario para login</label><input type="text" id="efun-user" placeholder="Ej: jorge" autocapitalize="none"></div>
   <div class="fr"><label>Contraseña (dejar vacío para no cambiar)</label><input type="password" id="efun-pass" placeholder="Nueva contraseña"></div>
+  <div class="fr"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="efun-encargado" style="width:16px;height:16px;accent-color:var(--blue)"> <span>👔 Encargado (ve y asigna todas las tareas de sus clientes)</span></label></div>
   <div class="ma"><button onclick="CM3('mefun')">Cancelar</button><button class="bp" onclick="saveEditFun()">Guardar</button></div>
 </div></div>
 <!-- MODAL DRAG RECURRENTE -->

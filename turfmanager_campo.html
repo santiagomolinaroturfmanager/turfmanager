@@ -290,12 +290,30 @@ function fD(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')
 function aD(d,n){var r=new Date(d);r.setDate(r.getDate()+n);return r;}
 function monday(d){var r=new Date(d);var day=r.getDay();var diff=day===0?-6:1-day;r.setDate(r.getDate()+diff);r.setHours(0,0,0,0);return r;}
 function tFuns(t){return Array.isArray(t.funs)?t.funs:(t.fun?[t.fun]:[]);}
+function toggleAsignar(taskId,funNombre){
+  var t=tasks.find(function(x){return x.id===taskId;});
+  if(!t)return;
+  if(!Array.isArray(t.funs))t.funs=t.funs?[t.funs]:[];
+  var idx=t.funs.indexOf(funNombre);
+  if(idx>=0){
+    t.funs.splice(idx,1); // unassign
+  } else {
+    t.funs.push(funNombre); // assign
+  }
+  t._dirty=true;
+  saveSingleTask(t).catch(function(e){console.warn('asignar save error',e);queueTaskSync(t,t.est);});
+  render();
+}
+
 function taskForFun(t,funName){
-  // Task belongs to funcionario if assigned to them, OR if unassigned and funcionario works for that client
+  var fo=funcionarios.find(function(f){return f.nombre===funName;});
+  // Encargado sees ALL tasks of their clients regardless of assignment
+  if(fo&&fo.encargado&&fo.clientes){
+    return fo.clientes.indexOf(t.cli)>=0;
+  }
+  // Regular funcionario: assigned to them, OR unassigned and works for that client
   var funs=tFuns(t);
   if(funs.length)return funs.indexOf(funName)>=0;
-  // No funcionario assigned - check if this funcionario works for the task's client
-  var fo=funcionarios.find(function(f){return f.nombre===funName;});
   if(!fo||!fo.clientes)return false;
   return fo.clientes.indexOf(t.cli)>=0;
 }
@@ -405,9 +423,14 @@ async function doLogin(){
 }
 
 var isAdmin=false;
+var isEncargado=false;
+var encargadoClientes=[];
 function enterApp(nombre){
   cFun=nombre;
   isAdmin=(nombre.toLowerCase()==='admin');
+  var funObjEnc=funcionarios.find(function(f){return f.nombre===nombre;});
+  isEncargado=funObjEnc?!!funObjEnc.encargado:false;
+  encargadoClientes=(isEncargado&&funObjEnc.clientes)?funObjEnc.clientes:[];
   localStorage.setItem('campo_session',JSON.stringify({nombre:nombre}));
   document.getElementById('topbar-name').textContent=isAdmin?'👁 Admin':nombre;
   // Show/hide admin filter bar
@@ -850,6 +873,24 @@ function renderTaskCard(t){
     body+='<span style="font-size:12px;color:var(--tx2);font-weight:600">Fecha de la tarea</span>';
     body+='<input type="date" id="fec-'+t.id+'" value="'+t.fec+'" onchange="cambiarFecha('+t.id+',this.value)" style="flex:1;padding:6px 10px;font-size:14px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg);color:var(--tx);font-family:inherit">';
     body+='</div>';
+    // Assignment section (admin and encargado only)
+    if(isAdmin||isEncargado){
+      var opsList=funcionarios.filter(function(f){
+        if(f.encargado)return false; // only operative funcionarios
+        if(!f.clientes)return false;
+        return f.clientes.indexOf(t.cli)>=0; // must work for this client
+      });
+      var curFuns=tFuns(t);
+      body+='<div style="margin-bottom:14px;padding:10px 12px;background:var(--bg2);border-radius:var(--br)">';
+      body+='<div style="font-size:12px;color:var(--tx2);font-weight:600;margin-bottom:8px">👤 Asignar a</div>';
+      body+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
+      opsList.forEach(function(op){
+        var isAssigned=curFuns.indexOf(op.nombre)>=0;
+        body+='<button onclick="toggleAsignar('+t.id+',\''+op.nombre.replace(/'/g,"\\'")+'\')" style="font-size:12px;padding:6px 12px;border-radius:20px;border:1px solid '+(isAssigned?'var(--blue)':'var(--bo2)')+';background:'+(isAssigned?'var(--blue)':'var(--bg)')+';color:'+(isAssigned?'#fff':'var(--tx)')+';cursor:pointer;font-family:inherit">'+op.nombre+'</button>';
+      });
+      if(!opsList.length)body+='<span style="font-size:12px;color:var(--tx3)">Sin funcionarios operativos para este cliente</span>';
+      body+='</div></div>';
+    }
     if(t.spc&&t.tar!=='Mant. Maquinaria') body+='<div class="spec-box"><div class="spec-lbl">Especificaciones</div>'+t.spc+'</div>';
     if(t.tar==='Mant. Maquinaria'&&t.chk&&Object.keys(t.chk).length){
       body+='<div class="spec-box" style="border-left-color:#3B6D11">';
