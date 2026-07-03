@@ -228,15 +228,15 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg3);min-he
     <button onclick="clearFunFilter()" style="font-size:11px;padding:3px 8px;border-radius:var(--br);border:0.5px solid var(--bo2);background:none;cursor:pointer;font-family:inherit">✕ Limpiar</button>
   </div>
 
+  <div id="week-nav-wrap">
   <div class="week-nav">
     <button class="week-nav-btn" onclick="navWeek(-1)"><i class="ti ti-chevron-left"></i></button>
     <span class="week-label" id="week-label"></span>
     <button class="week-today" onclick="goToday()">Hoy</button>
     <button class="week-nav-btn" onclick="navWeek(1)"><i class="ti ti-chevron-right"></i></button>
   </div>
-
-  <!-- Week strip (always visible) -->
   <div class="week-strip" id="week-strip"></div>
+  </div>
 
   <div class="content" id="main-content"></div>
 <div id="libro-content" style="display:none;padding:16px;max-width:600px;margin:0 auto">
@@ -437,7 +437,11 @@ function setView(v){
   // Show/hide main vs libro content
   var mc=document.getElementById('main-content');
   var lc=document.getElementById('libro-content');
-  var rc=document.getElementById('reporte-content');
+  var wnw=document.getElementById('week-nav-wrap');
+  if(wnw)wnw.style.display=(v==='reporte'||v==='libro')?'none':'';
+  // week-strip only in dia view (semana has its own header)
+  var wstrip=document.getElementById('week-strip');
+  if(wstrip)wstrip.style.display=v==='dia'?'':'none';
   if(mc)mc.style.display=v==='libro'?'none':'';
   if(lc)lc.style.display=v==='libro'?'':'none';
   if(v==='libro'){renderLibroCampo();populateLibroCampoFilters();}
@@ -1166,8 +1170,9 @@ function renderLibroCampo(){
   c.canchas.forEach(function(ca){
     var nm=typeof ca==='object'?ca.nombre:ca;
     var lastEntry=libroEntradas.filter(function(e){return e.cli===cid&&e.can===nm;}).sort(function(a,b){return b.fec.localeCompare(a.fec);})[0];
+    var cliBg=cBG(cid),cliTx=cTX(cid);
     var card=document.createElement('div');
-    card.style.cssText='background:var(--bg2);border-radius:12px;padding:14px;cursor:pointer;border:0.5px solid var(--bo)';
+    card.style.cssText='background:var(--bg2);border-radius:12px;padding:14px;cursor:pointer;border:0.5px solid var(--bo);border-left:4px solid '+cliBg;
     var title=document.createElement('div');
     title.style.cssText='font-weight:700;font-size:15px;margin-bottom:4px';
     title.textContent=nm;
@@ -1200,7 +1205,11 @@ function renderLibroCampo(){
 
 function openLibroCampoEntry(can,cid){
   _lcCanActual={can:can,cli:cid};
-  document.getElementById('mlc-title').textContent='📝 '+can;
+  var mlcTitle=document.getElementById('mlc-title');
+  mlcTitle.textContent='📝 '+can;
+  var cliBgM=cBG(cid);
+  mlcTitle.style.borderLeft='4px solid '+cliBgM;
+  mlcTitle.style.paddingLeft='10px';
   // Show last 3 entries as preview
   var entries=libroEntradas.filter(function(e){return e.cli===cid&&e.can===can;}).slice(0,3);
   var preview='';

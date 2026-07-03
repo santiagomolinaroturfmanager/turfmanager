@@ -260,6 +260,7 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
     </div>
   </div>
   <span id="save-indicator" style="font-size:11px;color:#27500A;min-width:70px;text-align:right"></span>
+  <button class="btn" id="btnimport" onclick="openImportRiego()" title="Importar riego desde Hydrawise"><i class="ti ti-droplet"></i> Importar riego</button>
   <button class="btn primary" id="btnadd" onclick="ONT(false)"><i class="ti ti-plus"></i> Nueva tarea</button>
 </div>
 <div class="fbar" id="fb">
@@ -463,6 +464,25 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
       <div class="fr"><label>Hasta</label><input type="time" id="act-has" value="11:00"></div>
     </div>
     <div class="ma"><button onclick="CM3('mact')">Cancelar</button><button class="bp" onclick="saveAct()">Guardar</button></div>
+  </div>
+</div>
+<!-- MODAL IMPORTAR RIEGO -->
+<div id="mimport" style="display:none" class="modal-bg">
+  <div class="modal" style="max-width:600px">
+    <h2>💧 Importar riego desde Hydrawise</h2>
+    <div style="font-size:13px;color:var(--tx2);margin-bottom:14px;line-height:1.6">
+      Subí el archivo <strong>.xlsx</strong> exportado de Hydrawise. Se sumará el tiempo de todas las zonas de cada cancha por ciclo de riego, y se crearán las tareas de Riego automáticamente.
+    </div>
+    <div class="fr" style="grid-column:span 2">
+      <label>Cliente destino</label>
+      <select id="import-cli"><option value="">Seleccionar cliente...</option></select>
+    </div>
+    <div class="fr" style="grid-column:span 2;margin-top:10px">
+      <label>Archivo Hydrawise (.xlsx)</label>
+      <input type="file" id="import-file" accept=".xlsx" onchange="parseImportFile()" style="font-size:13px;padding:8px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg2);color:var(--tx);width:100%">
+    </div>
+    <div id="import-preview" style="margin-top:14px;max-height:300px;overflow-y:auto;font-size:12px"></div>
+    <div class="ma"><button onclick="CM3('mimport')">Cancelar</button><button class="bp" id="import-confirm-btn" onclick="confirmImportRiego()" style="display:none">Importar</button></div>
   </div>
 </div>
 <!-- MODAL LIBRO DE CAMPO -->
@@ -1345,6 +1365,180 @@ function renderCanchaView(){
   h+='</tbody></table>';
   var inner=document.getElementById('cal-cancha-inner');
   (inner||ct).innerHTML=h;
+}
+
+// ── IMPORTAR RIEGO HYDRAWISE ─────────────────────────────────
+var _importedTasks=[];
+
+function openImportRiego(){
+  _importedTasks=[];
+  var sel=document.getElementById('import-cli');
+  sel.innerHTML='<option value="">Seleccionar cliente...</option>';
+  clientes.forEach(function(c){var o=document.createElement('option');o.value=c.id;o.textContent=c.nombre;sel.appendChild(o);});
+  document.getElementById('import-file').value='';
+  document.getElementById('import-preview').innerHTML='';
+  document.getElementById('import-confirm-btn').style.display='none';
+  document.getElementById('mimport').style.display='flex';
+}
+
+function parseImportFile(){
+  var fileInput=document.getElementById('import-file');
+  var file=fileInput.files[0];
+  if(!file)return;
+  var cli=parseInt(document.getElementById('import-cli').value)||0;
+  if(!cli){alert('Primero seleccioná el cliente destino');fileInput.value='';return;}
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var data=new Uint8Array(e.target.result);
+      var wb=XLSX.read(data,{type:'array',cellDates:true});
+      _importedTasks=buildRiegoTasks(wb,cli);
+      renderImportPreview();
+    }catch(err){
+      document.getElementById('import-preview').innerHTML='<div style="color:var(--red)">Error al leer el archivo: '+err.message+'</div>';
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function buildRiegoTasks(wb,cli){
+  var canchas={};
+  wb.SheetNames.forEach(function(sn){
+    var parts=sn.split(' Zona ');
+    if(parts.length===2){
+      var cancha=parts[0],zona=parts[1];
+      if(!canchas[cancha])canchas[cancha]=[];
+      canchas[cancha].push({sheet:sn,zona:zona});
+    }
+  });
+  var tasks=[];
+  Object.keys(canchas).forEach(function(cancha){
+    var runs=[];
+    canchas[cancha].forEach(function(z){
+      var ws=wb.Sheets[z.sheet];
+      var rows=XLSX.utils.sheet_to_json(ws,{header:1});
+      for(var i=1;i<rows.length;i++){
+        var row=rows[i];
+        if(!row[0])continue;
+        var dt=row[0] instanceof Date?row[0]:new Date(row[0]);
+        var mins=typeof row[2]==='number'?row[2]:parseInt(row[2])||0;
+        if(mins>0&&!isNaN(dt.getTime()))runs.push({zona:z.zona,dt:dt,mins:mins});
+      }
+    });
+    // Group by date
+    var byDate={};
+    runs.forEach(function(r){
+      var key=r.dt.getFullYear()+'-'+String(r.dt.getMonth()+1).padStart(2,'0')+'-'+String(r.dt.getDate()).padStart(2,'0');
+      if(!byDate[key])byDate[key]=[];
+      byDate[key].push(r);
+    });
+    // Cluster by cycle (within 3 hours)
+    Object.keys(byDate).forEach(function(fec){
+      var dayRuns=byDate[fec].sort(function(a,b){return a.dt-b.dt;});
+      var clusters=[];
+      dayRuns.forEach(function(r){
+        var placed=false;
+        for(var ci=0;ci<clusters.length;ci++){
+          var last=clusters[ci][clusters[ci].length-1];
+          if(Math.abs(r.dt-last.dt)<3*3600*1000){clusters[ci].push(r);placed=true;break;}
+        }
+        if(!placed)clusters.push([r]);
+      });
+      clusters.forEach(function(c){
+        var start=c.reduce(function(a,b){return a.dt<b.dt?a:b;}).dt;
+        var total=c.reduce(function(s,x){return s+x.mins;},0);
+        var sorted=c.slice().sort(function(a,b){return parseInt(a.zona)-parseInt(b.zona);});
+        var obs=sorted.map(function(x){return 'S'+x.zona+':'+x.mins+'min';}).join(', ');
+        var desH=String(start.getHours()).padStart(2,'0')+':'+String(start.getMinutes()).padStart(2,'0');
+        var endMin=start.getHours()*60+start.getMinutes()+total;
+        var hasH=String(Math.floor(endMin/60)%24).padStart(2,'0')+':'+String(endMin%60).padStart(2,'0');
+        tasks.push({cli:cli,can:cancha,fec:fec,des:desH,has:hasH,totalMin:total,obs:obs});
+      });
+    });
+  });
+  tasks.sort(function(a,b){return a.fec.localeCompare(b.fec)||a.des.localeCompare(b.des);});
+  return tasks;
+}
+
+function renderImportPreview(){
+  var ct=document.getElementById('import-preview');
+  if(!_importedTasks.length){ct.innerHTML='<div style="color:var(--tx3)">No se encontraron riegos en el archivo</div>';return;}
+  // Determine date range of the file
+  var fechas=_importedTasks.map(function(t){return t.fec;}).sort();
+  var fecMin=fechas[0],fecMax=fechas[fechas.length-1];
+  var cli=_importedTasks[0].cli;
+  // Count existing Hydrawise riegos in range that will be replaced
+  var existingHydra=tasks.filter(function(x){
+    return x.cli===cli&&x.tar==='Riego'&&x.obs&&x.obs.indexOf('Hydrawise:')===0&&x.fec>=fecMin&&x.fec<=fecMax;
+  }).length;
+  // Count programmed (non-Hydrawise) pending riegos in range that will be removed
+  var progPend=tasks.filter(function(x){
+    return x.cli===cli&&x.tar==='Riego'&&x.est==='pendiente'&&(!x.obs||x.obs.indexOf('Hydrawise:')!==0)&&x.fec>=fecMin&&x.fec<=fecMax;
+  }).length;
+  var h='<div style="margin-bottom:10px;padding:10px;background:var(--bg2);border-radius:var(--br);line-height:1.7">';
+  h+='<div><strong>'+_importedTasks.length+'</strong> ciclos de riego en el archivo</div>';
+  h+='<div style="font-size:11px;color:var(--tx2)">Período: '+fecMin+' a '+fecMax+'</div>';
+  if(existingHydra)h+='<div style="font-size:11px;color:var(--orange)">↻ '+existingHydra+' riegos Hydrawise previos serán reemplazados por el dato más reciente</div>';
+  if(progPend)h+='<div style="font-size:11px;color:var(--red)">✕ '+progPend+' riegos programados (pendientes) serán eliminados</div>';
+  h+='</div>';
+  h+='<table style="width:100%;border-collapse:collapse;font-size:11px">';
+  h+='<tr style="background:var(--bg2)"><th style="padding:4px;text-align:left">Cancha</th><th style="padding:4px">Fecha</th><th style="padding:4px">Horario</th><th style="padding:4px">Min</th></tr>';
+  _importedTasks.forEach(function(t){
+    h+='<tr style="border-bottom:0.5px solid var(--bo)">';
+    h+='<td style="padding:4px">'+t.can+'</td>';
+    h+='<td style="padding:4px;text-align:center">'+t.fec+'</td>';
+    h+='<td style="padding:4px;text-align:center">'+t.des+'-'+t.has+'</td>';
+    h+='<td style="padding:4px;text-align:center">'+t.totalMin+'</td>';
+    h+='</tr>';
+  });
+  h+='</table>';
+  ct.innerHTML=h;
+  document.getElementById('import-confirm-btn').style.display='';
+}
+
+async function confirmImportRiego(){
+  if(!_importedTasks.length)return;
+  var cli=_importedTasks[0].cli;
+  var fechas=_importedTasks.map(function(t){return t.fec;}).sort();
+  var fecMin=fechas[0],fecMax=fechas[fechas.length-1];
+  if(!confirm('¿Importar '+_importedTasks.length+' ciclos de riego?\n\nEsto reemplazará los riegos Hydrawise previos y eliminará los riegos programados pendientes en el período '+fecMin+' a '+fecMax+'.'))return;
+
+  // 1. Find and delete existing Hydrawise riegos in range (to replace with latest)
+  var toDelete=tasks.filter(function(x){
+    return x.cli===cli&&x.tar==='Riego'&&x.fec>=fecMin&&x.fec<=fecMax&&(
+      (x.obs&&x.obs.indexOf('Hydrawise:')===0)|| // previous Hydrawise imports
+      (x.est==='pendiente'&&(!x.obs||x.obs.indexOf('Hydrawise:')!==0)) // programmed pending
+    );
+  });
+  var delIds=toDelete.map(function(x){return x.id;});
+
+  // Remove from local array
+  tasks=tasks.filter(function(x){return delIds.indexOf(x.id)<0;});
+
+  // Delete from Supabase (batch)
+  if(delIds.length){
+    try{
+      await fetch(SB_URL+'/rest/v1/tareas?id=in.('+delIds.join(',')+')',{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
+    }catch(e){console.warn('delete error',e);}
+  }
+
+  // 2. Create new tasks from the file (latest truth)
+  var creados=[];
+  _importedTasks.forEach(function(t){
+    var newTask={
+      id:nxId++,cli:t.cli,can:t.can,tar:'Riego',funs:[],maq:'',maq2:'',
+      fec:t.fec,des:t.des,has:t.has,spc:'',est:'completada',obs:'Hydrawise: '+t.obs,
+      recId:null,chk:{},hsIni:null,hsFin:null
+    };
+    tasks.push(newTask);
+    creados.push(newTask);
+  });
+  creados.forEach(function(t){saveTaskToSupabase(t);});
+  saveStateLocal();
+  CM3('mimport');
+  render();
+  alert('✓ '+creados.length+' riegos importados\n'+(delIds.length?('✕ '+delIds.length+' riegos previos/programados eliminados'):''));
 }
 
 // ── LIBRO DE CAMPO ───────────────────────────────────────────
