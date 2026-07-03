@@ -357,7 +357,7 @@ async function loadData(){
     clientes=cliRows;
     funcionarios=funRows;
     maquinas=maqRows.map(function(m){return{id:m.id,nombre:m.nombre,tipo:m.tipo,marca:m.marca||'',cat:m.cat||'general',scope:m.scope,cliId:m.cli_id,hs:m.hs,intervalo:m.intervalo,proximo:m.proximo,tareas:m.tareas||[],svcTareas:m.svc_tareas||[],hist:m.hist||[]};});
-    tasks=tarRows.map(function(t){return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',recId:t.rec_id,chk:t.chk||{},hsIni:t.hs_ini,hsFin:t.hs_fin,tsIni:t.ts_ini};});
+    tasks=tarRows.map(function(t){return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',recId:t.rec_id,chk:t.chk||{},hsIni:t.hs_ini,hsFin:t.hs_fin,tsIni:t.ts_ini,compPor:t.comp_por||null};});
     var actRows=await sbGet('actividades','select=*&order=fec,des');
     acts=actRows.map(function(a){return{id:a.id,cli:a.cli||null,fec:a.fec,can:a.can,des:a.des,has:a.has,tipo:a.tipo,detalle:a.detalle};});
     await loadLibroCampo();
@@ -934,7 +934,7 @@ function renderTaskCard(t){
     } else if(t.est==='en_curso'){
       body+='<button class="btn-completar" onclick="completar('+t.id+')"><i class="ti ti-check"></i> Marcar como completada</button>';
     } else {
-      body+='<div class="done-row"><i class="ti ti-circle-check-filled"></i> Tarea completada</div>';
+      body+='<div class="done-row"><i class="ti ti-circle-check-filled"></i> Tarea completada'+(t.compPor?' por '+t.compPor:'')+'</div>';
     }
     body+='</div>';
   }
@@ -1013,7 +1013,7 @@ async function saveSingleTask(t){
   var row={id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],
     maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,
     spc:t.spc||'',est:t.est,obs:t.obs||'',rec_id:t.recId||null,
-    chk:t.chk||{},hs_ini:t.hsIni||null,hs_fin:t.hsFin||null,ts_ini:t.tsIni||null};
+    chk:t.chk||{},hs_ini:t.hsIni||null,hs_fin:t.hsFin||null,ts_ini:t.tsIni||null,comp_por:t.compPor||null};
   await sbUpsert('tareas',[row]);
 }
 async function verifyTaskSaved(taskId, expectedEst){
@@ -1355,8 +1355,10 @@ function completar(id){
     }
   }
   t.est='completada';
+  // Register who completed (the logged-in user pressing the button)
+  t.compPor=isAdmin?'Admin':cFun;
   // Add novedad
-  var mainFun=tFuns(t)[0]||'?';
+  var mainFun=t.compPor;
   var novTxt=t.obs?(t.tar+' - '+t.can+': "'+t.obs+'"'):(t.tar+' - '+t.can+' completado');
   if(!novs)novs=[];
   novs.unshift({id:Date.now(),tipo:t.obs?'anomalia':'ok',fun:mainFun,txt:novTxt,fec:fD(new Date()),leida:false});

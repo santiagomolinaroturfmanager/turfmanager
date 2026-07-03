@@ -2626,6 +2626,7 @@ function OD(id){
     '<dt>Especificaciones</dt><dd>'+(t.spc||'-')+'</dd>'+
     hsInfo+cflInfo+
     (t.recId?'<dt>Tipo</dt><dd style="color:var(--blue)">Recurrente</dd>':'')+
+    (t.est==='completada'&&t.compPor?'<dt>Completada por</dt><dd style="color:var(--green);font-weight:600">'+t.compPor+'</dd>':'')+
     (t.obs?'<dt>Observaciones</dt><dd>'+t.obs+'</dd>':'');
   var done=t.est==='completada';
   document.getElementById('bdone').style.display=done?'none':'';
@@ -2690,7 +2691,7 @@ function saveTaskToSupabase(t){
   if(!t)return;
   var row={id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',
     fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',
-    rec_id:t.recId||null,chk:t.chk||{},hs_ini:t.hsIni||null,hs_fin:t.hsFin||null};
+    rec_id:t.recId||null,chk:t.chk||{},hs_ini:t.hsIni||null,hs_fin:t.hsFin||null,comp_por:t.compPor||null};
   return sbUpsert('tareas',[row]).catch(function(e){console.warn('saveTaskToSupabase error',e);});
 }
 function DEL(){
@@ -3450,7 +3451,7 @@ async function loadFromSupabase(){
     clientes=cliRows;
     funcionarios=funRows;
     maquinas=maqRows.map(function(m){return{id:m.id,nombre:m.nombre,tipo:m.tipo,marca:m.marca||'',cat:m.cat||'general',scope:m.scope,cliId:m.cli_id,hs:m.hs,intervalo:m.intervalo,proximo:m.proximo,tareas:m.tareas||[],svcTareas:m.svc_tareas||[],hist:m.hist||[]};});
-    tasks=tarRows.map(function(t){return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',recId:t.rec_id,chk:t.chk||{},hsIni:t.hs_ini,hsFin:t.hs_fin};})
+    tasks=tarRows.map(function(t){return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',recId:t.rec_id,chk:t.chk||{},hsIni:t.hs_ini,hsFin:t.hs_fin,compPor:t.comp_por||null};})
     var actRows=await sbGet('actividades','select=*&order=fec,des');
     acts=actRows.map(function(a){return{id:a.id,cli:a.cli||null,fec:a.fec,can:a.can,des:a.des,has:a.has,tipo:a.tipo,detalle:a.detalle};});
     await loadLibro();
