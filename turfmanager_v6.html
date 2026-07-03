@@ -507,10 +507,12 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
       <div class="fr"><label>Disponibilidad</label><select id="maq-scope" onchange="document.getElementById('maq-cli-row').style.display=this.value==='cliente'?'':'none'"><option value="general">General</option><option value="cliente">Asignada a cliente</option></select></div>
       <div class="fr" id="maq-cli-row" style="display:none"><label>Cliente</label><select id="maq-cli"></select></div>
       <div class="fr"><label>Horas actuales</label><input type="number" id="maq-hs" placeholder="0" min="0"></div>
-      <div class="fr"><label>Intervalo service (hs)</label><input type="number" id="maq-int" placeholder="250"></div>
-      <div class="fr"><label>Próximo service (hs)</label><input type="number" id="maq-next" placeholder="250"></div>
     </div>
     <div class="fr"><label>Tareas que realiza</label><div id="maq-tasks-check" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px"></div></div>
+    <div class="fr" style="grid-column:span 2">
+      <label>Tareas de service e intervalos (hs)</label>
+      <div id="maq-svc-intervalo" style="margin-top:8px;display:flex;flex-direction:column;gap:6px"></div>
+    </div>
     <div class="ma"><button onclick="CM3('mmaq')">Cancelar</button><button class="bp" onclick="SVMaq()">Guardar</button></div>
   </div>
 </div>
@@ -639,6 +641,7 @@ let alertas=[
 let nxAlr=3;
 
 let lluviaData={};
+let heladasData={};
 let tempData={}; // {YYYY-MM-DD: tempC}
 
 let tasks=[
@@ -767,7 +770,7 @@ function CM3(id){document.getElementById(id).style.display='none';}
 function CWF(n){cFMon=aD(cFMon,n*7);RF();}
 function GTF(){cFMon=gMon(new Date());RF();}
 function CM2R(n){cMonthR+=n;if(cMonthR>11){cMonthR=0;cYearR++;}if(cMonthR<0){cMonthR=11;cYearR--;}renderResumen();}
-function getPlanRows(isSint){var tarList=isSint?tiposTareaSint:tiposTarea;var base=[{label:'Lluvia (mm)',key:'_lluvia',type:'sum'},{label:'Temperatura media (C)',key:'_temp',type:'avg'}].concat(tarList.map(function(t){return{label:t,key:t,type:'count'};}));if(!planRowOrder||planRowOrder.length!==base.length)planRowOrder=base.map(function(_,i){return i;});return planRowOrder.map(function(i){return base[i];}); }
+function getPlanRows(isSint){var tarList=isSint?tiposTareaSint:tiposTarea;var base=[{label:'Lluvia (mm)',key:'_lluvia',type:'sum'},{label:'Temperatura media (C)',key:'_temp',type:'avg'},{label:'Heladas',key:'_heladas',type:'hel'}].concat(tarList.map(function(t){return{label:t,key:t,type:'count'};}));if(!planRowOrder||planRowOrder.length!==base.length)planRowOrder=base.map(function(_,i){return i;});return planRowOrder.map(function(i){return base[i];}); }
 
 // ================================================================
 // TAB
@@ -972,6 +975,10 @@ function render(){
   h+=`<div class="rain-row"><div class="rain-lbl"><i class="ti ti-cloud-rain" style="font-size:10px"></i>mm</div>`;
   for(let i=0;i<7;i++){const d=aD(cMon,i),ds=fD(d);h+=`<div class="rain-cell"><input type="number" value="${lluviaData[ds]||''}" placeholder="—" min="0" step="0.5" onchange="setRain('${ds}',this.value)"></div>`;}
   h+=`</div></div>`;
+  // Heladas row
+  h+=`<div class="rain-row"><div class="rain-lbl"><i class="ti ti-snowflake" style="font-size:10px"></i>Hel</div>`;
+  for(let i=0;i<7;i++){const d=aD(cMon,i),ds=fD(d);const hv=heladasData[ds]||'';h+=`<div class="rain-cell"><select onchange="setHelada('${ds}',this.value)" style="width:100%;font-size:10px;border:none;background:transparent;color:var(--tx);font-family:inherit"><option value=""${hv===''?' selected':''}> </option><option value="D"${hv==='D'?' selected':''}>D</option><option value="M"${hv==='M'?' selected':''}>M</option><option value="F"${hv==='F'?' selected':''}>F</option></select></div>`;}
+  h+=`</div>`;
   const leg=clientes.map(c=>`<span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--tx2)"><span style="width:9px;height:9px;border-radius:2px;background:${c.bg};border:1px solid ${c.tx}"></span>${c.nombre}</span>`).join('');
   h+=`<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px">${leg}</div>`;
   // Auto-reset cancha view if no single client selected
@@ -995,6 +1002,7 @@ function render(){
   }
 }
 function setRain(fec,val){const v=parseFloat(val)||0;if(v>0)lluviaData[fec]=v;else delete lluviaData[fec];}
+function setHelada(ds,v){heladasData[ds]=v||null;saveStateLocal();render();}
 function openRainModal(){document.getElementById('rain-fec').value=fD(new Date());document.getElementById('rain-mm').value='';document.getElementById('mrain').style.display='flex';}
 function SVRain(){const fec=document.getElementById('rain-fec').value;const mm=parseFloat(document.getElementById('rain-mm').value)||0;if(!fec)return;if(mm>0)lluviaData[fec]=mm;else delete lluviaData[fec];CM3('mrain');render();}
 var _holdTimer=null,_holdId=null;
@@ -1602,6 +1610,7 @@ async function renderReg(){
   function grd(row){
     const data={};for(let d=1;d<=dim;d++)data[d]=null;
     if(row.key==='_lluvia'){for(let d=1;d<=dim;d++){const ds=`${cYear}-${String(cMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;if(lluviaData[ds])data[d]=lluviaData[ds];}return data;}
+    if(row.key==='_heladas'){for(let d=1;d<=dim;d++){const ds=`${cYear}-${String(cMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;if(heladasData[ds])data[d]=heladasData[ds];}return data;}
     if(row.key==='_temp'){for(let d=1;d<=dim;d++){const ds=`${cYear}-${String(cMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;if(tempData[ds]!==undefined)data[d]=tempData[ds];}return data;}
     mt.forEach(t=>{
       if(t.tar!==row.key)return;
@@ -1624,6 +1633,7 @@ async function renderReg(){
     const v=Object.values(data).filter(x=>x!==null);
     const vpos=v.filter(x=>x>0);
     if(row.key==='_temp'){if(!v.length)return null;const vals=v.filter(x=>x!==null);return vals.length?(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1):null;}
+    if(row.key==='_heladas'){if(!v.length)return null;return v.length||null;}
     if(!vpos.length)return null;
     if(row.type==='avg')return (vpos.reduce((a,b)=>a+b,0)/vpos.length).toFixed(1);
     return vpos.reduce((a,b)=>a+b,0);
@@ -1644,15 +1654,23 @@ async function renderReg(){
       let cls='dc2'+(we?' we':'');
       let content='';
       var isRiego=row.key==='Riego';
+      var isHelada=row.key==='_heladas';
       if(hasVal){
         if(isRain){cls+=' rv';content=val;}
         else if(isTemp){cls+=' tv';content=val!==null?Math.round(val):'—';}
+        else if(isHelada&&val){
+          cls+=' hv';
+          var heladaLabel={D:'Helada débil',M:'Helada moderada',F:'Helada fuerte'};
+          content=val;
+          extraAttr=' title="'+( heladaLabel[val]||val)+'"';
+        }
         else if(isRiego&&val>0){cls+=' hv';content=val.toFixed(2)+'mm';}
         else if(val>0){cls+=' hv';content='x';}
       }
       h+=`<td class="${cls}">${content}</td>`;
     }
-    const td=tot!==null?(isRain?`${tot}mm`:isTemp?`${tot}°C`:row.key==='Riego'?`${typeof tot==='number'?tot.toFixed(2):tot}mm`:tot):'';
+    const isHelRow=row.key==='_heladas';
+const td=tot!==null?(isRain?`${tot}mm`:isTemp?`${tot}°C`:isHelRow?tot:row.key==='Riego'?`${typeof tot==='number'?tot.toFixed(2):tot}mm`:tot):'';
     h+=`<td class="tot2">${td}</td></tr>`;
   });
   h+=`</tbody></table></div>`;
@@ -1866,9 +1884,30 @@ function renderMaq(){
         <button class="btn danger sm" onclick="delMaq(${m.id})"><i class="ti ti-trash"></i></button>
       </div>
       <div style="margin-bottom:10px">${scopeLbl}${tarTags}</div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px"><span style="font-size:11px;color:var(--tx2)">Horas de uso</span><strong>${m.hs.toFixed(1)} hs</strong></div>
-      <div class="maq-bar-wrap"><div class="maq-bar ${nivel}" style="width:${pct}%"></div></div>
-      <div style="font-size:10px;color:var(--tx3);margin-bottom:10px">Próximo service: ${m.proximo}hs · Faltan ${restante.toFixed(1)}hs</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:11px;color:var(--tx2)">Horas actuales</span><strong>${m.hs.toFixed(1)} hs</strong></div>
+      ${(function(){
+        var svcItems=m.svcTareas&&m.svcTareas.length?m.svcTareas:[];
+        // Migrate string arrays
+        if(svcItems.length&&typeof svcItems[0]==='string')svcItems=svcItems.map(function(t){return{nombre:t,intervalo:null,ultimaHs:null};});
+        if(!svcItems.length){
+          return '<div style="font-size:11px;color:var(--tx3)">Sin tareas de service configuradas</div>';
+        }
+        var itemsConIntervalo=svcItems.filter(function(sv){return sv.intervalo;});
+        if(!itemsConIntervalo.length)return '<div style="font-size:11px;color:var(--tx3)">Sin intervalos configurados</div>';
+        return itemsConIntervalo.map(function(sv){
+          if(sv.ultimaHs===null||sv.ultimaHs===undefined)return '<div style="font-size:11px;color:var(--tx2);margin-bottom:4px;display:flex;justify-content:space-between"><span>'+sv.nombre+'</span><span style="color:var(--tx3)">Sin datos aún</span></div>';
+          var base=sv.ultimaHs;
+          var usado=Math.max(0,m.hs-base);
+          var pct2=Math.min(100,Math.round((usado/sv.intervalo)*100));
+          var restante2=Math.max(0,sv.intervalo-usado);
+          var niv=pct2>=90?'crit':pct2>=70?'warn':'ok';
+          return '<div style="margin-bottom:8px">'+
+            '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'+
+            '<span>'+sv.nombre+'</span>'+
+            '<span style="color:var(--tx3)">'+pct2+'% · faltan '+restante2.toFixed(0)+'hs</span></div>'+
+            '<div class="maq-bar-wrap"><div class="maq-bar '+niv+'" style="width:'+pct2+'%"></div></div></div>';
+        }).join('');
+      })()}
       <div><span class="badge-${nivel}"><i class="ti ${nivel==='ok'?'ti-circle-check':'ti-alert-triangle'}"></i> ${badgeTxt}</span></div>
       <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
         <button class="btn sm" onclick="regHoras(${m.id})"><i class="ti ti-pencil"></i> Corregir horas</button>
@@ -1883,6 +1922,17 @@ function regHoras(id){const m=maquinas.find(x=>x.id===id);if(!m)return;document.
 function SVCorrHoras(){const maqId=parseInt(document.getElementById('corr-maq').value);const hs=parseFloat(document.getElementById('corr-hs').value);const desc=document.getElementById('corr-desc').value||'Corrección manual';if(isNaN(hs)||hs<0){alert('Valor inválido');return;}const m=maquinas.find(x=>x.id===maqId);if(!m)return;m.hs=hs;m.hist.push({fec:fD(new Date()),hs,desc,tipo:'correccion'});CM3('mcorrhoras');checkMaqAlertas();renderMaq();alert(`✓ Horas de ${m.nombre} → ${hs}hs`);}
 function regService(id){const m=maquinas.find(x=>x.id===id);if(!m)return;const desc=prompt(`Service de ${m.nombre}\nDescripción:`)||'Service';m.hist.push({fec:fD(new Date()),hs:m.hs,desc,tipo:'service'});m.proximo=parseFloat((m.hs+m.intervalo).toFixed(1));checkMaqAlertas();renderMaq();alert(`✓ Service registrado. Próximo: ${m.proximo}hs`);}
 function openMaqModal(){document.getElementById('mmaq').dataset.editId='';document.querySelector('#mmaq h2').textContent='Registrar maquina';document.getElementById('maq-name').value='';document.getElementById('maq-hs').value='';document.getElementById('maq-int').value='250';document.getElementById('maq-next').value='250';document.getElementById('maq-cli-row').style.display='none';var mc3=document.getElementById('maq-cat');if(mc3)mc3.value='general';var mk3=document.getElementById('mq-marca');if(mk3)mk3.value='';document.querySelectorAll('#maq-tasks-check input').forEach(function(x){x.checked=false;});document.getElementById('mmaq').style.display='flex';}
+function setSvcIntervalo(mId,tarea,val){
+  var m=maquinas.find(function(x){return x.id===mId;});if(!m)return;
+  // Ensure object format
+  if(!m.svcTareas)m.svcTareas=[];
+  if(m.svcTareas.length&&typeof m.svcTareas[0]==='string'){
+    m.svcTareas=m.svcTareas.map(function(t){return{nombre:t,intervalo:null,ultimaHs:null};});
+  }
+  var obj=m.svcTareas.find(function(x){return x.nombre===tarea;});
+  if(obj)obj.intervalo=val?parseInt(val):null;
+  saveState();
+}
 function SVMaq(){const nombre=document.getElementById('maq-name').value.trim();if(!nombre){alert('Ingresá un nombre');return;}const scope=document.getElementById('maq-scope').value;const cliId=scope==='cliente'?parseInt(document.getElementById('maq-cli').value):null;const tareas=[...document.querySelectorAll('#maq-tasks-check input:checked')].map(x=>x.value);const hs=parseFloat(document.getElementById('maq-hs').value)||0;const inter=parseFloat(document.getElementById('maq-int').value)||250;const next=parseFloat(document.getElementById('maq-next').value)||hs+inter;maquinas.push({id:nxMaq++,nombre,tipo:document.getElementById('maq-tipo').value,scope,cliId,hs,intervalo:inter,proximo:next,tareas,hist:[]});rebuildSelects();CM3('mmaq');renderMaq();checkMaqAlertas();}
 function checkMaqAlertas(){maquinas.forEach(m=>{const r=m.proximo-m.hs;const ex=alertas.find(a=>a.ref===m.nombre&&a.tipo==='horas');if(ex)ex.estado=r<=0?'vencida':r<=30?'proxima':'activa';else if(r<=50&&r>=0)alertas.unshift({id:nxAlr++,desc:`Service ${m.nombre}`,tipo:'horas',dias:m.proximo,ref:m.nombre,ctx:'',notes:`Faltan ${r.toFixed(1)}hs`,estado:r<=0?'vencida':'proxima',leida:false});});updateAlrBadge();}
 function updateAlrBadge(){const u=alertas.filter(a=>!a.leida&&a.estado!=='ok').length;const b=document.getElementById('alrbadge');if(u>0){b.textContent=u;b.style.display='';}else b.style.display='none';}
@@ -2173,6 +2223,16 @@ function MDone(){
         t.hsFin=parseFloat(((+m.hs||0)+hs).toFixed(1));
         m.hs=t.hsFin;
         m.hist.push({fec:fD(new Date()),hs:t.hsFin,tar:t.tar,can:t.can,cliId:t.cli,desc:'',tipo:'uso',diff:parseFloat(hs.toFixed(1))});
+        // Update ultimaHs for each completed svc task
+        if(t.tar==='Mant. Maquinaria'&&t.chk&&m.svcTareas){
+          // Migrate to object format if needed
+          if(m.svcTareas.length&&typeof m.svcTareas[0]==='string'){
+            m.svcTareas=m.svcTareas.map(function(x){return{nombre:x,intervalo:null,ultimaHs:null};});
+          }
+          m.svcTareas.forEach(function(sv){
+            if(t.chk[sv.nombre])sv.ultimaHs=m.hs;
+          });
+        }
       }
     }
     checkMaqAlertas();
@@ -2313,7 +2373,16 @@ function renderCfg(){
   h+='<div class="cfg-section"><h3><i class="ti ti-tool"></i> Tareas de service</h3><div class="tag-list" style="margin-bottom:10px">';
   SVC_TAREAS.forEach(function(t,i){h+='<div class="tag-item">'+t+'<button class="tag-del" onclick="delSvcTarea('+i+')">x</button></div>';});
   h+='</div><div class="cfg-add-row"><div><label>Nueva tarea service</label><input type="text" id="cfg-svc-name" placeholder="Nombre"></div><button class="btn primary" onclick="addSvcTarea()">Agregar</button></div><div style="margin-top:12px;padding-top:10px;border-top:0.5px solid var(--bo)"><p style="font-size:12px;font-weight:500;color:var(--tx2);margin-bottom:8px">Asignacion por maquina</p><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">';
-  maquinas.forEach(function(m){if(!m.svcTareas)m.svcTareas=SVC_TAREAS.slice();h+='<div style="background:var(--bg);border:0.5px solid var(--bo);border-radius:var(--brl);padding:10px"><div style="font-size:12px;font-weight:500;margin-bottom:6px">'+m.nombre+'</div>';SVC_TAREAS.forEach(function(t){var chk=m.svcTareas.indexOf(t)>=0;h+='<label style="display:flex;align-items:center;gap:5px;font-size:11px;margin-bottom:3px;cursor:pointer"><input type="checkbox" '+(chk?'checked ':'')+' onchange="toggleSvcTarea('+m.id+',this.value,this.checked)" value="'+t+'" style="accent-color:var(--blue)"> '+t+'</label>';});h+='</div>';});
+  maquinas.forEach(function(m){if(!m.svcTareas)m.svcTareas=SVC_TAREAS.slice();h+='<div style="background:var(--bg);border:0.5px solid var(--bo);border-radius:var(--brl);padding:10px"><div style="font-size:12px;font-weight:500;margin-bottom:6px">'+m.nombre+'</div>';SVC_TAREAS.forEach(function(t){
+  var svcObj=m.svcTareas&&typeof m.svcTareas[0]==='object'?m.svcTareas.find(function(x){return x.nombre===t;}):null;
+  var chk=svcObj||(Array.isArray(m.svcTareas)&&typeof m.svcTareas[0]==='string'&&m.svcTareas.indexOf(t)>=0);
+  var intervalo=svcObj?svcObj.intervalo:'';
+  h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">';
+  h+='<label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;min-width:180px"><input type="checkbox" '+(chk?'checked ':'')+' onchange="toggleSvcTarea('+m.id+',this.value,this.checked)" value="'+t+'" style="accent-color:var(--blue)"> '+t+'</label>';
+  h+='<input type="number" placeholder="hs" min="0" step="1" value="'+(intervalo||'')+'" onchange="setSvcIntervalo('+m.id+',\''+t+'\',this.value)" style="width:60px;font-size:11px;padding:2px 4px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg2)">';
+  h+='<span style="font-size:10px;color:var(--tx3)">hs</span>';
+  h+='</div>';
+});h+='</div>';});
   h+='</div></div></div>';
   // Checklists
   h+=`<div class="cfg-section"><h3><i class="ti ti-checklist"></i> Checklist por tarea</h3>
@@ -2363,7 +2432,46 @@ function addTipoTareaSint(){var el=document.getElementById('cfg-task-sint-name')
 function delTipoTareaSint(i){if(!confirm('Eliminar?'))return;tiposTareaSint.splice(i,1);planRowOrder=null;saveState();renderCfg();}
 function addSvcTarea(){var el=document.getElementById('cfg-svc-name');if(!el)return;var n=el.value.trim();if(!n||SVC_TAREAS.indexOf(n)>=0)return;SVC_TAREAS.push(n);el.value='';saveState();renderCfg();}
 function delSvcTarea(i){if(!confirm('Eliminar?'))return;SVC_TAREAS.splice(i,1);saveState();renderCfg();}
-function toggleSvcTarea(maqId,tarea,chk){var m=maquinas.find(function(x){return x.id===maqId;});if(!m)return;if(!m.svcTareas)m.svcTareas=SVC_TAREAS.slice();if(chk&&m.svcTareas.indexOf(tarea)<0)m.svcTareas.push(tarea);else if(!chk)m.svcTareas=m.svcTareas.filter(function(x){return x!==tarea;});saveState();}
+function renderSvcIntervaloEditor(m){
+  var wrap=document.getElementById('maq-svc-intervalo');
+  if(!wrap)return;
+  var items=m.svcTareas||[];
+  if(items.length&&typeof items[0]==='string')items=items.map(function(t){return{nombre:t,intervalo:null,ultimaHs:null};});
+  if(!items.length){
+    wrap.innerHTML='<div style="font-size:12px;color:var(--tx3)">Sin tareas de service configuradas.</div>';
+    return;
+  }
+  wrap.innerHTML='';
+  items.forEach(function(sv){
+    var row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:10px;padding:6px 10px;background:var(--bg2);border-radius:var(--br);border:0.5px solid var(--bo)';
+    var inp=document.createElement('input');
+    inp.type='number';inp.min='1';inp.placeholder='ej: 50';
+    inp.value=sv.intervalo||'';
+    inp.style.cssText='width:70px;font-size:12px;padding:3px 6px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg);color:var(--tx)';
+    var nombre=sv.nombre;var mId=m.id;
+    inp.onchange=function(){setSvcIntervalo(mId,nombre,this.value);};
+    row.innerHTML='<span style="font-size:12px;flex:1">'+nombre+'</span><label style="font-size:11px;color:var(--tx2);flex-shrink:0">Intervalo (hs):</label>';
+    row.appendChild(inp);
+    wrap.appendChild(row);
+  });
+}
+function toggleSvcTarea(mId,tarea,chk){
+  var m=maquinas.find(function(x){return x.id===mId;});if(!m)return;
+  // Migrate svcTareas to object format if needed
+  if(!m.svcTareas)m.svcTareas=[];
+  if(m.svcTareas.length&&typeof m.svcTareas[0]==='string'){
+    m.svcTareas=m.svcTareas.map(function(t){return{nombre:t,intervalo:null,ultimaHs:null};});
+  }
+  if(chk){
+    if(!m.svcTareas.find(function(x){return x.nombre===tarea;})){
+      m.svcTareas.push({nombre:tarea,intervalo:null,ultimaHs:null});
+    }
+  } else {
+    m.svcTareas=m.svcTareas.filter(function(x){return x.nombre!==tarea;});
+  }
+  saveState();
+}
 function SVMaq(){
   var editId=parseInt(document.getElementById('mmaq').dataset.editId||'');
   if(editId) maqEdit(editId); else maqSave();
@@ -2579,6 +2687,8 @@ function editMaqHoras(id){
     document.querySelectorAll('#maq-tasks-check input').forEach(function(inp){
       inp.checked=m.tareas&&m.tareas.indexOf(inp.value)>=0;
     });
+    // Populate svc tasks with interval inputs
+    renderSvcIntervaloEditor(m);
   },50);
 }
 function renderMaq(){
@@ -2868,7 +2978,7 @@ function loadStateLocal(){
 function loadState(){return loadStateLocal();}
 function saveStateLocal(){
   try{
-    const state={clientes,funcionarios,tiposTarea,tiposTareaSint,tiposMaquina,SVC_TAREAS,checklists,maquinas,alertas,lluviaData,tempData,tasks,recs,novs,nxCli,nxFun,nxMaq,nxAlr,nxId,nxRec,nxNov,planRowOrder,savedAt:new Date().toISOString()};
+    const state={clientes,funcionarios,tiposTarea,tiposTareaSint,tiposMaquina,SVC_TAREAS,checklists,maquinas,alertas,lluviaData,heladasData,tempData,tasks,recs,novs,nxCli,nxFun,nxMaq,nxAlr,nxId,nxRec,nxNov,planRowOrder,savedAt:new Date().toISOString()};
     localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
   }catch(e){console.warn('saveStateLocal error',e);}
 }
