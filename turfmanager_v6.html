@@ -973,7 +973,7 @@ function render(){
     h+=`<div class="tl">${HRS[hi]}</div>`;
     for(let i=0;i<7;i++){
       const d=aD(cMon,i),ds=fD(d);
-      const dt=fil.filter(t=>t.fec===ds&&parseInt(t.des.split(':')[0])===hn);
+      const dt=fil.filter(t=>t.fec===ds&&parseInt(t.des.split(':')[0])===hn).sort((a,b)=>a.des.localeCompare(b.des));
       h+=`<div class="dc" data-date="${ds}" data-hour="${hn}" ondragover="dov(event)" ondragleave="dol(event)" ondrop="ddr(event)" onclick="dcClick(event,'${ds}',${hn})">`;
       dt.forEach(t=>{
         var bg=cBG(t.cli),tx=cTX(t.cli),drag=t.est==='pendiente';
@@ -2445,14 +2445,14 @@ function ONT(ir,taskId,prefillDate,prefillHour){
       document.getElementById('nrec-hasta').value=y+'-12-31';
       document.getElementById('nrec-hasta').max=fD(aD(new Date(),365));
     }
-    document.querySelectorAll('.dbt').forEach(function(b){b.classList.remove('sel');});
+    document.querySelectorAll('#ndp .dbt').forEach(function(b){b.classList.remove('sel');});
     document.querySelectorAll('#nfun-checks input').forEach(function(inp){inp.checked=false;});
       }
   CM3('mdet');
   setNTipo('canchas');
   document.getElementById('mnew').style.display='flex';
 }
-document.querySelectorAll('.dbt').forEach(b=>b.addEventListener('click',()=>b.classList.toggle('sel')));
+// Day button toggle handled via onclick inline on #ndp buttons
 function SVT(){
   // Handle Mant. Maquinaria separately
   if(_nTipo==='maquinaria'){SVTMaquinaria();return;}
@@ -2477,7 +2477,7 @@ function SVT(){
   if(isRec&&recEditId){
     var r=recs.find(function(x){return x.id===recEditId;});
     if(r){
-      var dias=[...document.querySelectorAll('.dbt.sel')].map(function(b){return parseInt(b.dataset.d);});
+      var dias=[...document.querySelectorAll('#ndp .dbt.sel')].map(function(b){return parseInt(b.dataset.d);});
       if(!dias.length){alert('Selecciona al menos un dia');return;}
       var hasta=document.getElementById('nrec-hasta').value||new Date().getFullYear()+'-12-31';
       Object.assign(r,base,{dias:dias,hasta:hasta});
@@ -2502,7 +2502,7 @@ function SVT(){
     editingId=null;CM3('mnew');saveState();render();return;
   }
   if(isRec){
-    var dias2=[...document.querySelectorAll('.dbt.sel')].map(function(b){return parseInt(b.dataset.d);});
+    var dias2=[...document.querySelectorAll('#ndp .dbt.sel')].map(function(b){return parseInt(b.dataset.d);});
     if(!dias2.length){alert('Selecciona al menos un dia');return;}
     var isDup=recs.some(function(r){return r.cli===base.cli&&r.can===base.can&&r.tar===base.tar&&r.des===base.des&&r.has===base.has&&JSON.stringify(r.dias.slice().sort()+'')===JSON.stringify(dias2.slice().sort()+'');});
     if(isDup){alert('Ya existe una recurrente identica.');return;}
@@ -2532,6 +2532,8 @@ function GRT(){
         if(tasks.some(function(t){return t.recId===r.id&&t.fec===ds;}))return;
         if(tasks.some(function(t){return t.est==='cancelada'&&t.cli===r.cli&&t.can===r.can&&t.tar===r.tar&&t.fec===ds;}))return;
         if(tasks.some(function(t){return (t.est==='completada'||t.est==='en_curso')&&t.cli===r.cli&&t.can===r.can&&t.tar===r.tar&&t.fec===ds;}))return;
+        // Prevent duplicates: skip if same cli+can+tar+fec+des already exists (any status)
+        if(tasks.some(function(t){return t.cli===r.cli&&t.can===r.can&&t.tar===r.tar&&t.fec===ds&&t.des===r.des;}))return;
         var newTask={id:nxId++,cli:r.cli,can:r.can,tar:r.tar,
           funs:(r.funs&&r.funs.length?r.funs:(r.fun?[r.fun]:[])),
           maq:r.maq||'',maq2:r.maq2||'',fec:ds,des:r.des,has:r.has,spc:r.spc||'',
@@ -3200,7 +3202,7 @@ function editRec(id){
     document.getElementById('ncan').value=r.can;document.getElementById('ntar').value=r.tar;
     document.getElementById('nmaq').value=r.maq||'';document.getElementById('ndes').value=r.des;
     document.getElementById('nhas').value=r.has;document.getElementById('nspc').value=r.spc||'';
-    document.querySelectorAll('.dbt').forEach(function(b){b.classList.toggle('sel',r.dias.includes(parseInt(b.dataset.d)));});
+    document.querySelectorAll('#ndp .dbt').forEach(function(b){b.classList.toggle('sel',r.dias.includes(parseInt(b.dataset.d)));});
     document.getElementById('nrec-hasta').value=r.hasta||'';
     document.getElementById('mnew').dataset.recEditId=id;
     var fns=tFuns(r);document.querySelectorAll('#nfun-checks input').forEach(function(inp){inp.checked=fns.indexOf(inp.value)>=0;});
