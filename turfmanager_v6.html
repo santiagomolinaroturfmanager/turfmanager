@@ -2374,16 +2374,27 @@ function delRecSolo(){
   }).sort(function(a,b){return a.fec.localeCompare(b.fec);})[0];
   if(next){
     var rec=recs.find(function(r){return r.id===_delRecId;});
-    if(rec){rec.skip=rec.skip||[];if(rec.skip.indexOf(next.fec)<0)rec.skip.push(next.fec);}
-    tasks=tasks.filter(function(t){return t.id!==next.id;});
+    if(rec){rec.skip=rec.skip||[];if(rec.skip.indexOf(next.fec)<0)rec.skip.push(next.fec);saveRecToSupabase(rec);}
+    var delId=next.id;
+    tasks=tasks.filter(function(t){return t.id!==delId;});
+    fetch(SB_URL+'/rest/v1/tareas?id=eq.'+delId,{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).catch(function(e){console.warn('del rec solo error',e);});
   }
   _delRecId=null;CM3('mrec-del');saveState();renderRec();render();
 }
 function delRecFuturas(){
   if(_delRecId===null)return;
   var hoy=fD(new Date());
-  tasks=tasks.filter(function(t){return!(t.recId===_delRecId&&t.fec>=hoy&&t.est==='pendiente');});
-  recs=recs.filter(function(r){return r.id!==_delRecId;});
+  var recIdToDel=_delRecId;
+  // Collect task IDs to delete from Supabase
+  var toDelIds=tasks.filter(function(t){return t.recId===recIdToDel&&t.fec>=hoy&&t.est==='pendiente';}).map(function(t){return t.id;});
+  tasks=tasks.filter(function(t){return!(t.recId===recIdToDel&&t.fec>=hoy&&t.est==='pendiente');});
+  recs=recs.filter(function(r){return r.id!==recIdToDel;});
+  // Delete tasks from Supabase
+  if(toDelIds.length){
+    fetch(SB_URL+'/rest/v1/tareas?id=in.('+toDelIds.join(',')+')',{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).catch(function(e){console.warn('del rec tasks error',e);});
+  }
+  // Delete recurrente from Supabase
+  fetch(SB_URL+'/rest/v1/recurrentes?id=eq.'+recIdToDel,{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).catch(function(e){console.warn('del rec error',e);});
   _delRecId=null;CM3('mrec-del');saveState();renderRec();render();
 }
 
@@ -2481,17 +2492,18 @@ function SVT(){
       if(!dias.length){alert('Selecciona al menos un dia');return;}
       var hasta=document.getElementById('nrec-hasta').value||new Date().getFullYear()+'-12-31';
       Object.assign(r,base,{dias:dias,hasta:hasta});
-      // Collect IDs of future pending tasks to delete from Supabase
+      // Remove future pending tasks from this recurrente
       var todayStr=fD(new Date());
-      var toDelIds=tasks.filter(function(t){return t.recId===recEditId&&t.fec>=todayStr&&t.est==='pendiente';}).map(function(t){return t.id;});
       tasks=tasks.filter(function(t){return!(t.recId===recEditId&&t.fec>=todayStr&&t.est==='pendiente');});
-      // Delete from Supabase
-      if(toDelIds.length){
-        fetch(SB_URL+'/rest/v1/tareas?id=in.('+toDelIds.join(',')+')',{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).catch(function(e){console.warn('rec edit delete error',e);});
-      }
-      // Save updated recurrente to Supabase
-      saveRecToSupabase(r);
-      GRT();
+      // Delete directly in Supabase by rec_id + date + status (covers tasks not loaded in memory)
+      fetch(SB_URL+'/rest/v1/tareas?rec_id=eq.'+recEditId+'&fec=gte.'+todayStr+'&est=eq.pendiente',{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}})
+        .then(function(){
+          // Save updated recurrente and regenerate AFTER deletion completes
+          saveRecToSupabase(r);
+          GRT();
+          render();renderRec();
+        })
+        .catch(function(e){console.warn('rec edit delete error',e);saveRecToSupabase(r);GRT();render();renderRec();});
     }
     document.getElementById('mnew').dataset.recEditId='';
     CM3('mnew');saveState();renderRec();render();return;
@@ -2520,20 +2532,32 @@ function SVT(){
 function GRT(){
   const tod=new Date();tod.setHours(0,0,0,0);
   var newTasks=[];
+  // Build a Set of existing task keys (cli|can|tar|fec|des) for O(1) dedup lookup
+  var existingKeys={};
+  var cancelledKeys={};
+  tasks.forEach(function(t){
+    var key=t.cli+'|'+t.can+'|'+t.tar+'|'+t.fec+'|'+t.des;
+    existingKeys[key]=true;
+    // Also track cancelled/done by cli+can+tar+fec (any des) to respect skips
+    var keyNoDies=t.cli+'|'+t.can+'|'+t.tar+'|'+t.fec;
+    if(t.est==='cancelada'||t.est==='completada'||t.est==='en_curso')cancelledKeys[keyNoDies]=true;
+  });
   recs.forEach(function(r){
     var hastaDate=new Date(r.hasta+'T23:59:00');var weekStart=gMon(tod);var sc=0;
-    // Deduplicate dias array
     var diasUniq=[...new Set(r.dias)];
+    var skipSet={};(r.skip||[]).forEach(function(s){skipSet[s]=true;});
     while(weekStart<=hastaDate&&sc<60){sc++;
       diasUniq.forEach(function(dn){
         var d=aD(weekStart,dn===0?6:dn-1);
         if(d<tod||d>hastaDate)return;
         var ds=fD(d);
-        if(tasks.some(function(t){return t.recId===r.id&&t.fec===ds;}))return;
-        if(tasks.some(function(t){return t.est==='cancelada'&&t.cli===r.cli&&t.can===r.can&&t.tar===r.tar&&t.fec===ds;}))return;
-        if(tasks.some(function(t){return (t.est==='completada'||t.est==='en_curso')&&t.cli===r.cli&&t.can===r.can&&t.tar===r.tar&&t.fec===ds;}))return;
-        // Prevent duplicates: skip if same cli+can+tar+fec+des already exists (any status)
-        if(tasks.some(function(t){return t.cli===r.cli&&t.can===r.can&&t.tar===r.tar&&t.fec===ds&&t.des===r.des;}))return;
+        if(skipSet[ds])return;
+        var keyNoDies=r.cli+'|'+r.can+'|'+r.tar+'|'+ds;
+        if(cancelledKeys[keyNoDies])return;
+        var key=r.cli+'|'+r.can+'|'+r.tar+'|'+ds+'|'+r.des;
+        if(existingKeys[key])return;
+        // Mark as existing NOW so we never create it twice in this same run
+        existingKeys[key]=true;
         var newTask={id:nxId++,cli:r.cli,can:r.can,tar:r.tar,
           funs:(r.funs&&r.funs.length?r.funs:(r.fun?[r.fun]:[])),
           maq:r.maq||'',maq2:r.maq2||'',fec:ds,des:r.des,has:r.has,spc:r.spc||'',
@@ -3173,11 +3197,12 @@ function dragConfirmCancel(){
 }
 function renderRec(){
   var DN=['Do','Lu','Ma','Mi','Ju','Vi','Sa'];
+  var DORDER=[1,2,3,4,5,6,0]; // Mon-Sun display order
   var el=document.getElementById('rec-ct');
   if(!recs.length){el.innerHTML='<div class="empty">Sin recurrentes</div>';return;}
   var h='';
   recs.forEach(function(r){
-    var dias=DN.map(function(n,i){return'<span class="rd'+(r.dias.includes(i)?' on':'')+'">'+ n+'</span>';}).join('');
+    var dias=DORDER.map(function(i){return'<span class="rd'+(r.dias.includes(i)?' on':'')+'">'+ DN[i]+'</span>';}).join('');
     var hD=new Date((r.hasta||'2099-01-01')+'T12:00');
     var hastaLbl=r.hasta?hD.toLocaleDateString('es-UY',{day:'numeric',month:'long',year:'numeric'}):'?';
     h+='<div class="rec-card"><div style="flex:1"><div style="font-size:13px;font-weight:500">'+r.tar+' - '+r.can+' <span style="font-size:10px;color:var(--tx2)">'+cN(r.cli)+'</span></div>';
