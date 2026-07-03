@@ -1155,9 +1155,10 @@ function nLoadSvcChecks(){
   wrap.style.display='';
   checksEl.innerHTML='';
   lista.forEach(function(item,i){
+    var itemNom=(typeof item==='object'&&item!==null)?item.nombre:item;
     var row=document.createElement('label');
     row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;'+(i<lista.length-1?'border-bottom:0.5px solid var(--bo)':'');
-    row.innerHTML='<input type="checkbox" value="'+item+'" checked style="accent-color:var(--blue);width:16px;height:16px"> <span style="font-size:13px">'+item+'</span>';
+    row.innerHTML='<input type="checkbox" value="'+itemNom+'" checked style="accent-color:var(--blue);width:16px;height:16px"> <span style="font-size:13px">'+itemNom+'</span>';
     checksEl.appendChild(row);
   });
 }

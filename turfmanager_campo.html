@@ -620,10 +620,25 @@ function renderDia(){
 
   var h='<div style="font-size:13px;font-weight:600;color:var(--tx2);margin-bottom:16px">'+dayLabel+'</div>';
   // Filter actividades by funcionario's clients AND cancha filter
-  var viewFun=isAdmin?getMSelValsC('af-fun-drop')[0]:cFun;
   var funCliIds=[];
-  if(viewFun){
-    var funObj2=funcionarios.find(function(f){return f.nombre===viewFun;});
+  if(isAdmin){
+    // Gather clients from ALL selected funcionarios; if none selected, no restriction
+    var selFuns=getMSelValsC('af-fun-drop');
+    if(selFuns.length){
+      selFuns.forEach(function(fn){
+        var fo=funcionarios.find(function(f){return f.nombre===fn;});
+        if(fo&&fo.clientes)fo.clientes.forEach(function(cid){if(funCliIds.indexOf(cid)<0)funCliIds.push(cid);});
+      });
+    }
+    // Also respect selected clients filter
+    var selClis=getMSelValsC('af-cli-drop');
+    if(selClis.length){
+      var cliInts=selClis.map(function(x){return parseInt(x);});
+      if(funCliIds.length){funCliIds=funCliIds.filter(function(c){return cliInts.indexOf(c)>=0;});}
+      else{funCliIds=cliInts;}
+    }
+  } else {
+    var funObj2=funcionarios.find(function(f){return f.nombre===cFun;});
     funCliIds=funObj2&&funObj2.clientes?funObj2.clientes:[];
   }
   var ffbTipoSel=document.getElementById(isAdmin?'af-tipo':'ffb-tipo');
@@ -761,13 +776,30 @@ function renderSemana(){
         // Add actividades deportivas chips
         var afTipoSel=document.getElementById(isAdmin?'af-tipo':'ffb-tipo');
         var tipoFilterVal=afTipoSel?afTipoSel.value:'';
+        // Determine allowed client IDs based on admin filters or funcionario
+        var weekCliIds=[];
+        if(isAdmin){
+          var wSelFuns=getMSelValsC('af-fun-drop');
+          if(wSelFuns.length){
+            wSelFuns.forEach(function(fn){
+              var fo=funcionarios.find(function(f){return f.nombre===fn;});
+              if(fo&&fo.clientes)fo.clientes.forEach(function(cid){if(weekCliIds.indexOf(cid)<0)weekCliIds.push(cid);});
+            });
+          }
+          var wSelClis=getMSelValsC('af-cli-drop');
+          if(wSelClis.length){
+            var wCliInts=wSelClis.map(function(x){return parseInt(x);});
+            if(weekCliIds.length){weekCliIds=weekCliIds.filter(function(c){return wCliInts.indexOf(c)>=0;});}
+            else{weekCliIds=wCliInts;}
+          }
+        } else {
+          var funObj3=funcionarios.find(function(f){return f.nombre===cFun;});
+          weekCliIds=funObj3&&funObj3.clientes?funObj3.clientes:[];
+        }
         var cellActs=(tipoFilterVal==='canchas'||tipoFilterVal==='maquinaria')?[]:acts.filter(function(a){
           if(a.fec!==ds||parseInt(a.des.substring(0,2))!==hh)return false;
           if(_ffbCan&&a.can!==_ffbCan)return false;
-          // Filter by funcionario's clients
-          var funObj3=funcionarios.find(function(f){return f.nombre===cFun;});
-          var fClis=funObj3&&funObj3.clientes?funObj3.clientes:[];
-          if(fClis.length&&a.cli&&fClis.indexOf(a.cli)<0)return false;
+          if(weekCliIds.length&&a.cli&&weekCliIds.indexOf(a.cli)<0)return false;
           return true;
         });
         cellActs.forEach(function(a){
