@@ -198,6 +198,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg3);min-he
     <button class="view-btn on" id="btn-dia" onclick="setView('dia')">📅 Día</button>
     <button class="view-btn" id="btn-semana" onclick="setView('semana')">🗓 Semana</button>
     <button class="view-btn" id="btn-reporte" style="display:none" onclick="setView('reporte')">📊 Resumen</button>
+    <button class="view-btn" id="btn-libro" style="display:none" onclick="setView('libro')">📓 Libro</button>
   </div>
 
   <!-- FUNCIONARIO FILTER BAR -->
@@ -238,6 +239,17 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg3);min-he
   <div class="week-strip" id="week-strip"></div>
 
   <div class="content" id="main-content"></div>
+<div id="libro-content" style="display:none;padding:16px;max-width:600px;margin:0 auto">
+  <!-- Cliente selector -->
+  <div style="margin-bottom:16px">
+    <label style="font-size:12px;color:var(--tx2);margin-bottom:6px;display:block;font-weight:600;text-transform:uppercase;letter-spacing:.3px">Cliente</label>
+    <select id="lc-sel-cli" onchange="renderLibroCampo()" style="width:100%;font-size:15px;padding:12px 14px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg2);color:var(--tx);font-family:inherit">
+      <option value="">Seleccionar cliente...</option>
+    </select>
+  </div>
+  <!-- Canchas grid -->
+  <div id="lc-canchas"></div>
+</div>
 </div>
 
 <script>
@@ -422,8 +434,11 @@ function setView(v){
   if(rb){rb.classList.toggle('on',v==='reporte');rb.style.display=isAdmin?'':'none';}
   var lb=document.getElementById('btn-libro');
   if(lb){lb.classList.toggle('on',v==='libro');lb.style.display=isAdmin?'':'none';}
-  // Show/hide libro content
+  // Show/hide main vs libro content
+  var mc=document.getElementById('main-content');
   var lc=document.getElementById('libro-content');
+  var rc=document.getElementById('reporte-content');
+  if(mc)mc.style.display=v==='libro'?'none':'';
   if(lc)lc.style.display=v==='libro'?'':'none';
   if(v==='libro'){renderLibroCampo();populateLibroCampoFilters();}
   else render();
@@ -1112,6 +1127,110 @@ function getFunFilteredTasks(taskList){
   });
 }
 
+// ── LIBRO DE CAMPO (CAMPO) ───────────────────────────────────
+var libroEntradas=[];
+var nxLibro=1;
+var _lcCanActual=null; // {can, cli}
+
+async function loadLibroCampo(){
+  try{
+    var rows=await sbGet('libro_campo','select=*&order=fec.desc');
+    libroEntradas=rows.map(function(r){return{id:r.id,fec:r.fec,can:r.can,cli:r.cli,comentario:r.comentario};});
+    nxLibro=libroEntradas.length?Math.max.apply(null,libroEntradas.map(function(r){return r.id;}))+1:1;
+  }catch(e){console.warn('loadLibroCampo error',e);}
+}
+
+function populateLibroCampoFilters(){
+  var sel=document.getElementById('lc-sel-cli');
+  if(!sel)return;
+  var prev=sel.value;
+  sel.innerHTML='<option value="">Seleccionar cliente...</option>';
+  clientes.forEach(function(c){
+    var o=document.createElement('option');
+    o.value=c.id;o.textContent=c.nombre;
+    if(prev==c.id)o.selected=true;
+    sel.appendChild(o);
+  });
+}
+
+function renderLibroCampo(){
+  var ct=document.getElementById('lc-canchas');if(!ct)return;
+  var sel=document.getElementById('lc-sel-cli');
+  var cid=sel?parseInt(sel.value)||0:0;
+  if(!cid){ct.innerHTML='<div style="color:var(--tx3);text-align:center;padding:32px;font-size:14px">Seleccioná un cliente para ver sus canchas</div>';return;}
+  var c=clientes.find(function(x){return x.id===cid;});
+  if(!c||!c.canchas||!c.canchas.length){ct.innerHTML='<div style="color:var(--tx3);text-align:center;padding:32px">Sin canchas configuradas</div>';return;}
+  ct.innerHTML='';
+  var grid=document.createElement('div');
+  grid.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:10px';
+  c.canchas.forEach(function(ca){
+    var nm=typeof ca==='object'?ca.nombre:ca;
+    var lastEntry=libroEntradas.filter(function(e){return e.cli===cid&&e.can===nm;}).sort(function(a,b){return b.fec.localeCompare(a.fec);})[0];
+    var card=document.createElement('div');
+    card.style.cssText='background:var(--bg2);border-radius:12px;padding:14px;cursor:pointer;border:0.5px solid var(--bo)';
+    var title=document.createElement('div');
+    title.style.cssText='font-weight:700;font-size:15px;margin-bottom:4px';
+    title.textContent=nm;
+    card.appendChild(title);
+    if(lastEntry){
+      var d=new Date(lastEntry.fec+'T12:00');
+      var lastDate=String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0');
+      var lastText=lastEntry.comentario.length>50?lastEntry.comentario.substring(0,50)+'...':lastEntry.comentario;
+      var dateEl=document.createElement('div');
+      dateEl.style.cssText='font-size:11px;color:var(--tx3);margin-bottom:6px';
+      dateEl.textContent='Última entrada: '+lastDate;
+      card.appendChild(dateEl);
+      var textEl=document.createElement('div');
+      textEl.style.cssText='font-size:12px;color:var(--tx2);line-height:1.4';
+      textEl.textContent=lastText;
+      card.appendChild(textEl);
+    } else {
+      var emptyEl=document.createElement('div');
+      emptyEl.style.cssText='font-size:12px;color:var(--tx3);font-style:italic';
+      emptyEl.textContent='Sin entradas aún';
+      card.appendChild(emptyEl);
+    }
+    (function(canName, clientId){
+      card.addEventListener('click', function(){openLibroCampoEntry(canName, clientId);});
+    })(nm, cid);
+    grid.appendChild(card);
+  });
+  ct.appendChild(grid);
+}
+
+function openLibroCampoEntry(can,cid){
+  _lcCanActual={can:can,cli:cid};
+  document.getElementById('mlc-title').textContent='📝 '+can;
+  // Show last 3 entries as preview
+  var entries=libroEntradas.filter(function(e){return e.cli===cid&&e.can===can;}).slice(0,3);
+  var preview='';
+  if(entries.length){
+    preview=entries.map(function(e){
+      var d=new Date(e.fec+'T12:00');
+      var fd=String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+      return fd+': '+e.comentario.substring(0,60)+(e.comentario.length>60?'...':'');
+    }).join('\n');
+  }
+  document.getElementById('mlc-hist-preview').textContent=preview;
+  var ta=document.getElementById('mlc-textarea');
+  if(ta)ta.value='';
+  var modal=document.getElementById('mlc-modal');
+  if(modal)modal.style.display='flex';
+}
+
+function saveLibroCampoEntry(){
+  if(!_lcCanActual)return;
+  var com=document.getElementById('mlc-textarea').value.trim();
+  if(!com){alert('Escribí un comentario');return;}
+  var fec=fD(new Date());
+  var row={id:nxLibro++,cli:_lcCanActual.cli,can:_lcCanActual.can,fec:fec,comentario:com};
+  libroEntradas.unshift(row);
+  sbUpsert('libro_campo',[row]).catch(function(e){console.warn('saveLibroCampo error',e);});
+  CM3campo('mlc-modal');
+  _lcCanActual=null;
+  renderLibroCampo();
+}
+
 function hDiff(des,has){var h1=parseInt(des.split(':')[0]),m1=parseInt(des.split(':')[1]||0);var h2=parseInt(has.split(':')[0]),m2=parseInt(has.split(':')[1]||0);return Math.max(0,((h2*60+m2)-(h1*60+m1))/60);}
 
 function completar(id){
@@ -1425,6 +1544,19 @@ initLogin();
     <div style="margin-bottom:12px"><label style="font-size:12px;color:var(--tx2);margin-bottom:4px;display:block">Fecha</label><input type="date" id="lc-fec" style="width:100%;font-size:14px;padding:10px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg2);color:var(--tx);font-family:inherit"></div>
     <div style="margin-bottom:16px"><label style="font-size:12px;color:var(--tx2);margin-bottom:4px;display:block">Comentario</label><textarea id="lc-com" rows="5" placeholder="Observaciones generales de la cancha..." style="width:100%;font-size:14px;padding:10px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg2);color:var(--tx);font-family:inherit;resize:vertical"></textarea></div>
     <div style="display:flex;gap:10px"><button onclick="CM3('mlibro-campo')" style="flex:1;padding:12px;border-radius:var(--br);border:0.5px solid var(--bo2);background:none;font-size:14px;cursor:pointer;font-family:inherit">Cancelar</button><button onclick="saveLibroCampo()" style="flex:1;padding:12px;border-radius:var(--br);border:none;background:var(--blue);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Guardar</button></div>
+  </div>
+</div>
+
+<!-- MODAL COMENTARIO CANCHA -->
+<div id="mlc-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:flex-end;justify-content:center">
+  <div style="background:var(--bg);border-radius:16px 16px 0 0;padding:20px 20px 32px;width:100%;max-width:500px">
+    <div style="font-size:15px;font-weight:700;margin-bottom:4px" id="mlc-title"></div>
+    <div style="font-size:12px;color:var(--tx3);margin-bottom:14px" id="mlc-hist-preview"></div>
+    <textarea id="mlc-textarea" rows="5" placeholder="Escribí tus observaciones..." style="width:100%;font-size:14px;padding:10px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg2);color:var(--tx);font-family:inherit;resize:none;margin-bottom:12px"></textarea>
+    <div style="display:flex;gap:10px">
+      <button onclick="CM3campo('mlc-modal')" style="flex:1;padding:13px;border-radius:var(--br);border:0.5px solid var(--bo2);background:none;font-size:14px;cursor:pointer;font-family:inherit">Cancelar</button>
+      <button onclick="saveLibroCampoEntry()" style="flex:2;padding:13px;border-radius:var(--br);border:none;background:var(--blue);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Guardar</button>
+    </div>
   </div>
 </div>
 </body>
