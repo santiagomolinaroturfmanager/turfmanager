@@ -258,6 +258,8 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
       <button id="vw-hora" onclick="setCalView('hora')" style="font-size:11px;padding:3px 10px;border:none;background:var(--blue);color:#fff;cursor:pointer;font-family:inherit">⏰ Horario</button>
       <button id="vw-cancha" onclick="setCalView('cancha')" style="font-size:11px;padding:3px 10px;border:none;background:var(--bg2);color:var(--tx2);cursor:pointer;font-family:inherit">🏟 Cancha</button>
     </div>
+    <button id="vw-select" onclick="toggleSelectMode()" style="font-size:11px;padding:3px 10px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg2);color:var(--tx2);cursor:pointer;font-family:inherit;margin-left:8px">☑ Seleccionar</button>
+    <button id="vw-delsel" onclick="deleteSelectedTasks()" style="display:none;font-size:11px;padding:3px 10px;border:none;border-radius:var(--br);background:var(--red);color:#fff;cursor:pointer;font-family:inherit;margin-left:6px">🗑 Eliminar (<span id="selcount">0</span>)</button>
   </div>
   <span id="save-indicator" style="font-size:11px;color:#27500A;min-width:70px;text-align:right"></span>
   <button class="btn" id="btnimport" onclick="openImportRiego()" title="Importar riego desde Hydrawise"><i class="ti ti-droplet"></i> Importar riego</button>
@@ -979,7 +981,9 @@ function render(){
         var cflStyle='';
         // Long-press drag: set draggable only after 400ms hold
         var dragAttr=drag?' draggable="true" ondragstart="ds2(event,'+t.id+')" ondragend="de2()"':'';
-        h+='<div class="chip st-'+t.est+'" id="chip-'+t.id+'" style="background:'+bg+';color:'+tx+cflStyle+'"'+dragAttr+' onclick="OD('+t.id+')">';
+        var chipOnclick=_selectMode?('toggleTaskSelect('+t.id+',event)'):('OD('+t.id+')');
+        var selOutline=(_selectMode&&_selectedTasks[t.id])?';outline:3px solid var(--blue)':'';
+        h+='<div class="chip st-'+t.est+'" id="chip-'+t.id+'" style="background:'+bg+';color:'+tx+cflStyle+selOutline+'"'+(_selectMode?'':dragAttr)+' onclick="'+chipOnclick+'">';
         h+='<b>'+t.tar+' - '+t.can+'</b>';
         var maqLabel=(t.maq?(t.maq+(t.maq2?' + '+t.maq2:'')):'');
         var f24=function(h){if(!h)return h;var p=h.split(':');return String(parseInt(p[0])).padStart(2,'0')+':'+(p[1]||'00');};
@@ -1027,16 +1031,6 @@ function render(){
   h+=`</div>`;
   const leg=clientes.map(c=>`<span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--tx2)"><span style="width:9px;height:9px;border-radius:2px;background:${c.bg};border:1px solid ${c.tx}"></span>${c.nombre}</span>`).join('');
   h+=`<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px">${leg}</div>`;
-  // Auto-reset cancha view if no single client selected
-  if(typeof _calView!=='undefined'&&_calView==='cancha'){
-    var cliValsCheck=getMSelVals('msel-cli-drop');
-    if(cliValsCheck.length!==1){
-      _calView='hora';
-      var bh=document.getElementById('vw-hora'),bc=document.getElementById('vw-cancha');
-      if(bh){bh.style.background='var(--blue)';bh.style.color='#fff';}
-      if(bc){bc.style.background='var(--bg2)';bc.style.color='var(--tx2)';}
-    }
-  }
   var isCanchaView=typeof _calView!=='undefined'&&_calView==='cancha';
   var semanaEl=document.getElementById('tab-semana');
   if(!semanaEl)return;
@@ -1270,14 +1264,6 @@ function renderAct(){
 // ── CALENDAR VIEW TOGGLE ──────────────────────────────────
 var _calView='hora';
 function setCalView(v){
-  // Only allow cancha view with exactly 1 client selected
-  if(v==='cancha'){
-    var cliVals=getMSelVals('msel-cli-drop');
-    if(cliVals.length!==1){
-      alert('Seleccioná exactamente 1 cliente para usar la vista por cancha');
-      return;
-    }
-  }
   _calView=v;
   var bh=document.getElementById('vw-hora'),bc=document.getElementById('vw-cancha');
   if(bh){bh.style.background=v==='hora'?'var(--blue)':'var(--bg2)';bh.style.color=v==='hora'?'#fff':'var(--tx2)';}
@@ -1305,12 +1291,17 @@ function renderCanchaView(){
     return true;
   });
 
-  // Collect all canchas
-  var canchaSet={};
-  weekTasks.forEach(function(t){if(t.can)canchaSet[t.can]=true;});
-  weekActs.forEach(function(a){if(a.can)canchaSet[a.can]=true;});
-  var canchas=Object.keys(canchaSet).sort();
-  if(!canchas.length){ct.innerHTML='<div class="empty">Sin tareas esta semana</div>';return;}
+  // Collect all cliente+cancha combos
+  var comboSet={};
+  weekTasks.forEach(function(t){if(t.can)comboSet[t.cli+'|||'+t.can]=true;});
+  weekActs.forEach(function(a){if(a.can)comboSet[(a.cli||0)+'|||'+a.can]=true;});
+  var combos=Object.keys(comboSet).sort(function(a,b){
+    var pa=a.split('|||'),pb=b.split('|||');
+    var na=cN(parseInt(pa[0]))||'',nb=cN(parseInt(pb[0]))||'';
+    if(na!==nb)return na.localeCompare(nb);
+    return pa[1].localeCompare(pb[1]);
+  });
+  if(!combos.length){ct.innerHTML='<div class="empty">Sin tareas esta semana</div>';return;}
 
   // Build table
   var BMAP={pendiente:'var(--blue)',en_curso:'var(--orange)',completada:'var(--green)'};
@@ -1325,12 +1316,16 @@ function renderCanchaView(){
   h+='</tr></thead><tbody>';
 
   // Rows per cancha
-  canchas.forEach(function(can){
-    h+='<tr style="border-top:2px solid var(--bo2)"><td style="background:var(--bg2);border:0.5px solid var(--bo);border-top:2px solid var(--bo2);padding:6px 10px;font-weight:700;font-size:12px;position:sticky;left:0;z-index:1">'+can+'</td>';
+  combos.forEach(function(combo){
+    var comboParts=combo.split('|||');
+    var comboCli=parseInt(comboParts[0]),comboCan=comboParts[1];
+    var cliNom=cN(comboCli)||'—';
+    var cliBg=cBG(comboCli),cliTx=cTX(comboCli);
+    h+='<tr style="border-top:2px solid var(--bo2)"><td style="background:'+cliBg+';color:'+cliTx+';border:0.5px solid var(--bo);border-top:2px solid var(--bo2);padding:6px 10px;font-weight:700;font-size:11px;position:sticky;left:0;z-index:1"><div style="font-size:10px;opacity:.85">'+cliNom+'</div>'+comboCan+'</td>';
     days.forEach(function(d){
       var ds=fD(d);
-      var cellTasks=weekTasks.filter(function(t){return t.fec===ds&&t.can===can;});
-      var cellActs=weekActs.filter(function(a){return a.fec===ds&&a.can===can;});
+      var cellTasks=weekTasks.filter(function(t){return t.fec===ds&&t.can===comboCan&&t.cli===comboCli;});
+      var cellActs=weekActs.filter(function(a){return a.fec===ds&&a.can===comboCan&&(a.cli||0)===comboCli;});
       var cellItems=[];
       cellTasks.forEach(function(t){cellItems.push({type:'task',des:t.des,data:t});});
       cellActs.forEach(function(a){cellItems.push({type:'act',des:a.des.substring(0,5),data:a});});
@@ -1365,6 +1360,60 @@ function renderCanchaView(){
   h+='</tbody></table>';
   var inner=document.getElementById('cal-cancha-inner');
   (inner||ct).innerHTML=h;
+}
+
+// ── MODO SELECCIÓN MÚLTIPLE ──────────────────────────────────
+var _selectMode=false;
+var _selectedTasks={};
+
+function toggleSelectMode(){
+  _selectMode=!_selectMode;
+  _selectedTasks={};
+  var btn=document.getElementById('vw-select');
+  if(btn){
+    btn.style.background=_selectMode?'var(--blue)':'var(--bg2)';
+    btn.style.color=_selectMode?'#fff':'var(--tx2)';
+    btn.textContent=_selectMode?'✕ Cancelar':'☑ Seleccionar';
+  }
+  updateSelCount();
+  render();
+}
+
+function toggleTaskSelect(id,ev){
+  if(ev){ev.stopPropagation();}
+  if(_selectedTasks[id])delete _selectedTasks[id];
+  else _selectedTasks[id]=true;
+  updateSelCount();
+  var chip=document.getElementById('chip-'+id);
+  if(chip)chip.style.outline=_selectedTasks[id]?'3px solid var(--blue)':'';
+}
+
+function updateSelCount(){
+  var count=Object.keys(_selectedTasks).length;
+  var delBtn=document.getElementById('vw-delsel');
+  var cntSpan=document.getElementById('selcount');
+  if(cntSpan)cntSpan.textContent=count;
+  if(delBtn)delBtn.style.display=(_selectMode&&count>0)?'':'none';
+}
+
+async function deleteSelectedTasks(){
+  var ids=Object.keys(_selectedTasks).map(function(x){return parseInt(x);});
+  if(!ids.length)return;
+  if(!confirm('¿Eliminar '+ids.length+' tareas seleccionadas?'))return;
+  // Remove from local
+  tasks=tasks.filter(function(t){return ids.indexOf(t.id)<0;});
+  // Delete from Supabase
+  try{
+    await fetch(SB_URL+'/rest/v1/tareas?id=in.('+ids.join(',')+')',{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
+  }catch(e){console.warn('delete selected error',e);}
+  _selectedTasks={};
+  _selectMode=false;
+  var btn=document.getElementById('vw-select');
+  if(btn){btn.style.background='var(--bg2)';btn.style.color='var(--tx2)';btn.textContent='☑ Seleccionar';}
+  updateSelCount();
+  saveStateLocal();
+  render();
+  alert(ids.length+' tareas eliminadas');
 }
 
 // ── IMPORTAR RIEGO HYDRAWISE ─────────────────────────────────
@@ -2432,7 +2481,16 @@ function SVT(){
       if(!dias.length){alert('Selecciona al menos un dia');return;}
       var hasta=document.getElementById('nrec-hasta').value||new Date().getFullYear()+'-12-31';
       Object.assign(r,base,{dias:dias,hasta:hasta});
-      tasks=tasks.filter(function(t){return!(t.recId===recEditId&&t.fec>=fD(new Date())&&t.est==='pendiente');});
+      // Collect IDs of future pending tasks to delete from Supabase
+      var todayStr=fD(new Date());
+      var toDelIds=tasks.filter(function(t){return t.recId===recEditId&&t.fec>=todayStr&&t.est==='pendiente';}).map(function(t){return t.id;});
+      tasks=tasks.filter(function(t){return!(t.recId===recEditId&&t.fec>=todayStr&&t.est==='pendiente');});
+      // Delete from Supabase
+      if(toDelIds.length){
+        fetch(SB_URL+'/rest/v1/tareas?id=in.('+toDelIds.join(',')+')',{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).catch(function(e){console.warn('rec edit delete error',e);});
+      }
+      // Save updated recurrente to Supabase
+      saveRecToSupabase(r);
       GRT();
     }
     document.getElementById('mnew').dataset.recEditId='';
@@ -2580,6 +2638,11 @@ function MDone(){
   try{saveState();}catch(e){}
   render();
   if(cTab==='reg')renderReg();
+}
+function saveRecToSupabase(r){
+  if(!r)return;
+  var row={id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias,hasta:r.hasta,skip:r.skip||[]};
+  return sbUpsert('recurrentes',[row]).catch(function(e){console.warn('saveRecToSupabase error',e);});
 }
 function saveTaskToSupabase(t){
   if(!t)return;

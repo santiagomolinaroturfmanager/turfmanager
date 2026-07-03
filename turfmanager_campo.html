@@ -290,6 +290,15 @@ function fD(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')
 function aD(d,n){var r=new Date(d);r.setDate(r.getDate()+n);return r;}
 function monday(d){var r=new Date(d);var day=r.getDay();var diff=day===0?-6:1-day;r.setDate(r.getDate()+diff);r.setHours(0,0,0,0);return r;}
 function tFuns(t){return Array.isArray(t.funs)?t.funs:(t.fun?[t.fun]:[]);}
+function taskForFun(t,funName){
+  // Task belongs to funcionario if assigned to them, OR if unassigned and funcionario works for that client
+  var funs=tFuns(t);
+  if(funs.length)return funs.indexOf(funName)>=0;
+  // No funcionario assigned - check if this funcionario works for the task's client
+  var fo=funcionarios.find(function(f){return f.nombre===funName;});
+  if(!fo||!fo.clientes)return false;
+  return fo.clientes.indexOf(t.cli)>=0;
+}
 function cN(id){var c=clientes.find(function(x){return x.id===id;});return c?c.nombre:'';}
 function cBG(id){var c=clientes.find(function(x){return x.id===id;});return c?c.bg:'#ccc';}
 function cTX(id){var c=clientes.find(function(x){return x.id===id;});return c?c.tx:'#000';}
@@ -485,7 +494,7 @@ function renderWeekStrip(){
     var ds=fD(d);
     var isToday=ds===today;
     var isActive=cView==='dia'&&ds===cDay;
-    var hasTasks=tasks.some(function(t){return t.fec===ds&&tFuns(t).indexOf(cFun)>=0;});
+    var hasTasks=tasks.some(function(t){return t.fec===ds&&taskForFun(t,cFun);});
     h+='<div class="week-day'+(isToday?' today':'')+(isActive?' active':'')+'" onclick="selectDay(\''+ds+'\')">';
     h+='<div class="wd-name">'+DIS[d.getDay()]+'</div>';
     h+='<div class="wd-num">'+d.getDate()+'</div>';
@@ -507,7 +516,7 @@ function updatePendBadge(){
   var today=fD(new Date());
   var n=isAdmin
     ?tasks.filter(function(t){return t.fec===today&&t.est!=='completada'&&t.est!=='cancelada';}).length
-    :tasks.filter(function(t){return t.fec===today&&tFuns(t).indexOf(cFun)>=0&&t.est!=='completada'&&t.est!=='cancelada';}).length;
+    :tasks.filter(function(t){return t.fec===today&&taskForFun(t,cFun)&&t.est!=='completada'&&t.est!=='cancelada';}).length;
   var el=document.getElementById('topbar-pend');
   el.textContent=n>0?n+' pendiente'+(n!==1?'s hoy':' hoy'):'';
 }
@@ -595,7 +604,7 @@ function renderDia(){
 
   var myTasks=isAdmin
     ?getAdminTasks(cDay).sort(function(a,b){return a.des.localeCompare(b.des);})
-    :getFunFilteredTasks(tasks.filter(function(t){return t.fec===cDay&&tFuns(t).indexOf(cFun)>=0&&t.est!=='cancelada';})).sort(function(a,b){return a.des.localeCompare(b.des);});
+    :getFunFilteredTasks(tasks.filter(function(t){return t.fec===cDay&&taskForFun(t,cFun)&&t.est!=='cancelada';})).sort(function(a,b){return a.des.localeCompare(b.des);});
 
   var el=document.getElementById('main-content');
   // Check early if there's anything to show (tasks or actividades)
@@ -653,7 +662,7 @@ function renderSemana(){
   var weekTasks=[];
   for(var i=0;i<7;i++){
     var ds2=fD(aD(cMon,i));
-    var dTasks=isAdmin?getAdminTasks(ds2):getFunFilteredTasks(tasks.filter(function(t){return t.fec===ds2&&tFuns(t).indexOf(cFun)>=0&&t.est!=='cancelada';}));
+    var dTasks=isAdmin?getAdminTasks(ds2):getFunFilteredTasks(tasks.filter(function(t){return t.fec===ds2&&taskForFun(t,cFun)&&t.est!=='cancelada';}));
     dTasks.forEach(function(t){weekTasks.push(t);});
   }
   // Check if there are actividades to show even without tasks
@@ -723,7 +732,7 @@ function renderSemana(){
         var isToday=ds===today;
         var cellTasks=isAdmin
           ?getAdminTasks(ds).filter(function(t){return parseInt(t.des.split(':')[0])===hh;})
-          :tasks.filter(function(t){return t.fec===ds&&tFuns(t).indexOf(cFun)>=0&&t.est!=='cancelada'&&parseInt(t.des.split(':')[0])===hh;});
+          :tasks.filter(function(t){return t.fec===ds&&taskForFun(t,cFun)&&t.est!=='cancelada'&&parseInt(t.des.split(':')[0])===hh;});
         var cell=document.createElement('div');
         cell.style.cssText='border-right:0.5px solid var(--bo);border-bottom:0.5px solid var(--bo);min-height:44px;padding:2px;background:'+(isToday?'#FAFCFF':'var(--bg)');
         (function(tapDs){
