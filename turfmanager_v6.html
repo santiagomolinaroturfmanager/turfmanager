@@ -2310,7 +2310,21 @@ function delMaq(id){if(!confirm('¿Eliminar?'))return;maquinas=maquinas.filter(x
 function regHoras(id){const m=maquinas.find(x=>x.id===id);if(!m)return;document.getElementById('corr-maq').value=id;document.getElementById('corr-hs').value=m.hs.toFixed(1);document.getElementById('corr-desc').value='';document.getElementById('mcorrhoras').style.display='flex';}
 function SVCorrHoras(){const maqId=parseInt(document.getElementById('corr-maq').value);const hs=parseFloat(document.getElementById('corr-hs').value);const desc=document.getElementById('corr-desc').value||'Corrección manual';if(isNaN(hs)||hs<0){alert('Valor inválido');return;}const m=maquinas.find(x=>x.id===maqId);if(!m)return;m.hs=hs;m.hist.push({fec:fD(new Date()),hs,desc,tipo:'correccion'});CM3('mcorrhoras');checkMaqAlertas();renderMaq();alert(`✓ Horas de ${m.nombre} → ${hs}hs`);}
 function regService(id){const m=maquinas.find(x=>x.id===id);if(!m)return;const desc=prompt(`Service de ${m.nombre}\nDescripción:`)||'Service';m.hist.push({fec:fD(new Date()),hs:m.hs,desc,tipo:'service'});m.proximo=parseFloat((m.hs+m.intervalo).toFixed(1));checkMaqAlertas();renderMaq();alert(`✓ Service registrado. Próximo: ${m.proximo}hs`);}
-function openMaqModal(){document.getElementById('mmaq').dataset.editId='';document.querySelector('#mmaq h2').textContent='Registrar maquina';document.getElementById('maq-name').value='';document.getElementById('maq-hs').value='';document.getElementById('maq-int').value='250';document.getElementById('maq-next').value='250';document.getElementById('maq-cli-row').style.display='none';var mc3=document.getElementById('maq-cat');if(mc3)mc3.value='general';var mk3=document.getElementById('mq-marca');if(mk3)mk3.value='';document.querySelectorAll('#maq-tasks-check input').forEach(function(x){x.checked=false;});document.getElementById('mmaq').style.display='flex';}
+function openMaqModal(){
+  document.getElementById('mmaq').dataset.editId='';
+  document.querySelector('#mmaq h2').textContent='Registrar maquina';
+  document.getElementById('maq-name').value='';
+  document.getElementById('maq-hs').value='';
+  document.getElementById('maq-cli-row').style.display='none';
+  // Populate tipo dropdown
+  var mt=document.getElementById('maq-tipo');
+  if(mt){mt.innerHTML='';tiposMaquina.forEach(function(t){mt.innerHTML+='<option>'+t+'</option>';});}
+  var mc3=document.getElementById('maq-cat');if(mc3)mc3.value='general';
+  var mk3=document.getElementById('mq-marca');if(mk3)mk3.value='';
+  document.querySelectorAll('#maq-tasks-check input').forEach(function(x){x.checked=false;});
+  var svcWrap=document.getElementById('maq-svc-intervalo');if(svcWrap)svcWrap.innerHTML='';
+  document.getElementById('mmaq').style.display='flex';
+}
 function setSvcIntervalo(mId,tarea,val){
   var m=maquinas.find(function(x){return x.id===mId;});if(!m)return;
   // Ensure object format
