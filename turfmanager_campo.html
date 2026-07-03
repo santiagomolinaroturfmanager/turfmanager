@@ -394,6 +394,8 @@ function enterApp(nombre){
   if(abar)abar.style.display=isAdmin?'flex':'none';
   var rb=document.getElementById('btn-reporte');
   if(rb)rb.style.display=isAdmin?'':'none';
+  var lb2=document.getElementById('btn-libro');
+  if(lb2)lb2.style.display=isAdmin?'':'none';
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app-screen').style.display='flex';
   cMon=monday(new Date());
