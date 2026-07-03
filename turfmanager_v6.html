@@ -246,6 +246,7 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
     <button onclick="ST('act')">⚽ Actividades</button>
     <button onclick="ST('alr')">Alertas <span id="alrbadge" style="display:none;background:#E8A838;color:#fff;border-radius:9px;padding:0 5px;font-size:9px;margin-left:2px"></span></button>
     <button onclick="ST('rec')">Recurrentes</button>
+    <button onclick="ST('libro')">📓 Libro</button>
     <button onclick="ST('cfg')">Ajustes</button>
   </div>
   <div class="wnav ml-auto" id="wn">
@@ -356,7 +357,18 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
     <div class="sec-head"><h2><i class="ti ti-repeat" style="vertical-align:-2px;margin-right:4px"></i>Tareas recurrentes</h2><button class="btn primary" onclick="ONT(true)"><i class="ti ti-plus"></i> Nueva recurrente</button></div>
     <div id="rec-ct"></div>
   </div>
-  <div id="tab-cfg" style="display:none"></div>
+  <div id="tab-libro" style="display:none">
+  <div class="sec-head">
+    <h2>📓 Libro de campo</h2>
+    <button class="bp" onclick="openLibroModal()"><i class="ti ti-plus"></i> Nueva entrada</button>
+  </div>
+  <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+    <select id="libro-fcli" onchange="renderLibro()" style="font-size:13px;padding:5px 10px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg2);color:var(--tx);font-family:inherit"><option value="">Todos los clientes</option></select>
+    <select id="libro-fcan" onchange="renderLibro()" style="font-size:13px;padding:5px 10px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg2);color:var(--tx);font-family:inherit"><option value="">Todas las canchas</option></select>
+  </div>
+  <div id="libro-ct"></div>
+</div>
+<div id="tab-cfg" style="display:none"></div>
 </div>
 </div>
 
@@ -451,6 +463,19 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
       <div class="fr"><label>Hasta</label><input type="time" id="act-has" value="11:00"></div>
     </div>
     <div class="ma"><button onclick="CM3('mact')">Cancelar</button><button class="bp" onclick="saveAct()">Guardar</button></div>
+  </div>
+</div>
+<!-- MODAL LIBRO DE CAMPO -->
+<div id="mlibro" style="display:none" class="modal-bg">
+  <div class="modal">
+    <h2 id="mlibro-title">Nueva entrada</h2>
+    <div class="fg">
+      <div class="fr"><label>Cliente</label><select id="libro-cli" onchange="updateLibroCanchas()"><option value="">Seleccionar...</option></select></div>
+      <div class="fr"><label>Cancha</label><select id="libro-can"><option value="">Seleccionar...</option></select></div>
+      <div class="fr"><label>Fecha</label><input type="date" id="libro-fec"></div>
+      <div class="fr" style="grid-column:span 2"><label>Comentario</label><textarea id="libro-com" rows="5" placeholder="Observaciones generales de la cancha..." style="width:100%;padding:8px 10px;font-size:13px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg2);color:var(--tx);font-family:inherit;resize:vertical"></textarea></div>
+    </div>
+    <div class="ma"><button onclick="CM3('mlibro')">Cancelar</button><button class="bp" onclick="saveLibro()">Guardar</button></div>
   </div>
 </div>
 <!-- MODAL DETALLE JEFE -->
@@ -777,7 +802,7 @@ function getPlanRows(isSint){var tarList=isSint?tiposTareaSint:tiposTarea;var ba
 // ================================================================
 function ST(t){
   cTab=t;
-  const tabs=['semana','nov','reg','resumen','maq','act','alr','rec','cfg'];
+  const tabs=['semana','nov','reg','resumen','maq','act','alr','rec','libro','cfg'];
   tabs.forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.style.display=x===t?'':'none';});
   document.querySelectorAll('.nav button').forEach((b,i)=>b.className=tabs[i]===t?'on':'');
   document.getElementById('fb').style.display=t==='semana'?'flex':'none';
@@ -791,6 +816,7 @@ function ST(t){
   if(t==='alr')renderAlr();
   if(t==='act')renderAct();
   if(t==='cfg')renderCfg();
+  if(t==='libro'){renderLibro();populateLibroFilters();}
   if(t==='resumen')renderResumen();
 }
 
@@ -1319,6 +1345,124 @@ function renderCanchaView(){
   h+='</tbody></table>';
   var inner=document.getElementById('cal-cancha-inner');
   (inner||ct).innerHTML=h;
+}
+
+// ── LIBRO DE CAMPO ───────────────────────────────────────────
+var libroEntradas=[];
+var nxLibro=1;
+var _editLibroId=null;
+
+async function loadLibro(){
+  try{
+    var rows=await sbGet('libro_campo','select=*&order=fec.desc,can');
+    libroEntradas=rows.map(function(r){return{id:r.id,fec:r.fec,can:r.can,cli:r.cli,comentario:r.comentario};});
+    nxLibro=libroEntradas.length?Math.max.apply(null,libroEntradas.map(function(r){return r.id;}))+1:1;
+  }catch(e){console.warn('loadLibro error',e);}
+}
+
+function populateLibroFilters(){
+  var fCliSel=document.getElementById('libro-fcli');
+  var fCanSel=document.getElementById('libro-fcan');
+  if(!fCliSel||!fCanSel)return;
+  var prevCli=fCliSel.value,prevCan=fCanSel.value;
+  fCliSel.innerHTML='<option value="">Todos los clientes</option>';
+  clientes.forEach(function(c){var o=document.createElement('option');o.value=c.id;o.textContent=c.nombre;if(prevCli==c.id)o.selected=true;fCliSel.appendChild(o);});
+  var canchas={};
+  libroEntradas.forEach(function(e){canchas[e.can]=true;});
+  fCanSel.innerHTML='<option value="">Todas las canchas</option>';
+  Object.keys(canchas).sort().forEach(function(cn){var o=document.createElement('option');o.value=cn;o.textContent=cn;if(prevCan===cn)o.selected=true;fCanSel.appendChild(o);});
+}
+
+function renderLibro(){
+  var ct=document.getElementById('libro-ct');if(!ct)return;
+  var fCli=document.getElementById('libro-fcli');var fCan=document.getElementById('libro-fcan');
+  var selCli=fCli?parseInt(fCli.value)||0:0;
+  var selCan=fCan?fCan.value:'';
+  var entries=libroEntradas.filter(function(e){
+    if(selCli&&e.cli!==selCli)return false;
+    if(selCan&&e.can!==selCan)return false;
+    return true;
+  });
+  if(!entries.length){ct.innerHTML='<div style="color:var(--tx3);padding:24px;text-align:center">No hay entradas en el libro de campo</div>';return;}
+  // Group by cancha
+  var byCli={};
+  entries.forEach(function(e){
+    var cliNom=cN(e.cli)||'Sin cliente';
+    var key=cliNom+'|||'+e.can;
+    if(!byCli[key])byCli[key]={cliNom:cliNom,can:e.can,entries:[]};
+    byCli[key].entries.push(e);
+  });
+  var h='';
+  Object.keys(byCli).sort().forEach(function(key){
+    var g=byCli[key];
+    h+='<div style="margin-bottom:20px">';
+    h+='<div style="font-size:13px;font-weight:700;margin-bottom:8px;padding-bottom:6px;border-bottom:1.5px solid var(--bo2);display:flex;align-items:center;gap:8px">';
+    h+='<span style="color:var(--tx2)">'+g.cliNom+'</span><span style="color:var(--tx3)">›</span><span>'+g.can+'</span></div>';
+    g.entries.forEach(function(e){
+      var d=new Date(e.fec+'T12:00');
+      var dias=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+      var fechaStr=dias[d.getDay()]+' '+String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+      h+='<div style="padding:10px 14px;background:var(--bg2);border-radius:var(--br);margin-bottom:6px;border-left:3px solid var(--blue)">';
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
+      h+='<span style="font-size:11px;color:var(--tx3)">'+fechaStr+'</span>';
+      h+='<div style="display:flex;gap:6px">';
+      h+='<button onclick="editLibro('+e.id+')" style="font-size:11px;border:none;background:none;cursor:pointer;color:var(--blue)"><i class="ti ti-pencil"></i></button>';
+      h+='<button onclick="deleteLibro('+e.id+')" style="font-size:11px;border:none;background:none;cursor:pointer;color:var(--red)"><i class="ti ti-trash"></i></button>';
+      h+='</div></div>';
+      h+='<div style="font-size:13px;color:var(--tx);white-space:pre-wrap">'+e.comentario+'</div>';
+      h+='</div>';
+    });
+    h+='</div>';
+  });
+  ct.innerHTML=h;
+}
+
+function openLibroModal(id){
+  _editLibroId=id||null;
+  var e=id?libroEntradas.find(function(x){return x.id===id;}):null;
+  document.getElementById('mlibro-title').textContent=e?'Editar entrada':'Nueva entrada';
+  var cliSel=document.getElementById('libro-cli');
+  cliSel.innerHTML='<option value="">Seleccionar...</option>';
+  clientes.forEach(function(c){var o=document.createElement('option');o.value=c.id;o.textContent=c.nombre;if(e&&e.cli===c.id)o.selected=true;cliSel.appendChild(o);});
+  document.getElementById('libro-fec').value=e?e.fec:fD(new Date());
+  document.getElementById('libro-com').value=e?e.comentario:'';
+  updateLibroCanchas(e?e.can:'');
+  document.getElementById('mlibro').style.display='flex';
+}
+
+function updateLibroCanchas(selectedCan){
+  var cliSel=document.getElementById('libro-cli');
+  var canSel=document.getElementById('libro-can');
+  var cid=parseInt(cliSel.value)||0;
+  var c=clientes.find(function(x){return x.id===cid;});
+  canSel.innerHTML='<option value="">Seleccionar...</option>';
+  if(c&&c.canchas){c.canchas.forEach(function(ca){var nm=typeof ca==='object'?ca.nombre:ca;var o=document.createElement('option');o.value=nm;o.textContent=nm;if(selectedCan===nm)o.selected=true;canSel.appendChild(o);});}
+}
+
+function saveLibro(){
+  var cli=parseInt(document.getElementById('libro-cli').value)||0;
+  var can=document.getElementById('libro-can').value;
+  var fec=document.getElementById('libro-fec').value;
+  var com=document.getElementById('libro-com').value.trim();
+  if(!cli||!can||!fec||!com){alert('Completá todos los campos');return;}
+  var row={id:_editLibroId||nxLibro++,cli:cli,can:can,fec:fec,comentario:com};
+  if(_editLibroId){
+    var idx=libroEntradas.findIndex(function(x){return x.id===_editLibroId;});
+    if(idx>=0)libroEntradas[idx]=row;
+  } else {
+    libroEntradas.unshift(row);
+  }
+  sbUpsert('libro_campo',[row]).catch(function(e){console.warn('saveLibro error',e);});
+  CM3('mlibro');populateLibroFilters();renderLibro();
+}
+
+function editLibro(id){openLibroModal(id);}
+
+function deleteLibro(id){
+  if(!confirm('¿Eliminar esta entrada?'))return;
+  libroEntradas=libroEntradas.filter(function(x){return x.id!==id;});
+  fetch(SB_URL+'/rest/v1/libro_campo?id=eq.'+id,{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).catch(function(e){console.warn('deleteLibro error',e);});
+  populateLibroFilters();renderLibro();
 }
 
 function dcClick(e,ds,hn){
@@ -3000,6 +3144,7 @@ async function loadFromSupabase(){
     tasks=tarRows.map(function(t){return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',recId:t.rec_id,chk:t.chk||{},hsIni:t.hs_ini,hsFin:t.hs_fin};})
     var actRows=await sbGet('actividades','select=*&order=fec,des');
     acts=actRows.map(function(a){return{id:a.id,cli:a.cli||null,fec:a.fec,can:a.can,des:a.des,has:a.has,tipo:a.tipo,detalle:a.detalle};});
+    await loadLibro();
     nxAct=acts.length?Math.max.apply(null,acts.map(function(a){return a.id;}))+1:1;;
     recs=recRows.map(function(r){return{id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias||[],hasta:r.hasta,skip:r.skip||[]};});
     novs=novRows.map(function(n){return{id:n.id,tipo:n.tipo,fun:n.fun,txt:n.txt,fec:n.fec,leida:n.leida};});

@@ -321,6 +321,7 @@ async function loadData(){
     tasks=tarRows.map(function(t){return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',recId:t.rec_id,chk:t.chk||{},hsIni:t.hs_ini,hsFin:t.hs_fin,tsIni:t.ts_ini};});
     var actRows=await sbGet('actividades','select=*&order=fec,des');
     acts=actRows.map(function(a){return{id:a.id,cli:a.cli||null,fec:a.fec,can:a.can,des:a.des,has:a.has,tipo:a.tipo,detalle:a.detalle};});
+    await loadLibroCampo();
     if(!isAdmin)setTimeout(function(){initFunFilterBar();},100);
     recs=recRows.map(function(r){return{id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias||[],hasta:r.hasta,skip:r.skip||[]};});
     cfgRows.forEach(function(c){if(c.clave==='checklists')checklists=c.valor;});
@@ -417,7 +418,13 @@ function setView(v){
   document.getElementById('btn-semana').classList.toggle('on',v==='semana');
   var rb=document.getElementById('btn-reporte');
   if(rb){rb.classList.toggle('on',v==='reporte');rb.style.display=isAdmin?'':'none';}
-  render();
+  var lb=document.getElementById('btn-libro');
+  if(lb){lb.classList.toggle('on',v==='libro');lb.style.display=isAdmin?'':'none';}
+  // Show/hide libro content
+  var lc=document.getElementById('libro-content');
+  if(lc)lc.style.display=v==='libro'?'':'none';
+  if(v==='libro'){renderLibroCampo();populateLibroCampoFilters();}
+  else render();
 }
 
 function navWeek(n){
@@ -1407,6 +1414,15 @@ initLogin();
     <span id="sync-error-msg" style="flex:1;min-width:200px;font-weight:500"></span>
     <button onclick="retrySyncErrors()" style="padding:6px 14px;border-radius:6px;border:none;background:#fff;color:#A32D2D;font-weight:600;cursor:pointer;font-size:12px;flex-shrink:0">Reintentar</button>
     <button onclick="dismissSyncBanner()" style="padding:6px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.4);background:none;color:#fff;cursor:pointer;font-size:12px;flex-shrink:0">Ocultar</button>
+  </div>
+</div>
+<div id="mlibro-campo" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:flex-end;justify-content:center">
+  <div style="background:var(--bg);border-radius:16px 16px 0 0;padding:20px;width:100%;max-width:500px;max-height:85vh;overflow-y:auto">
+    <div style="font-size:16px;font-weight:700;margin-bottom:16px">📓 Nueva entrada</div>
+    <div style="margin-bottom:12px"><label style="font-size:12px;color:var(--tx2);margin-bottom:4px;display:block">Cancha</label><select id="lc-can" style="width:100%;font-size:14px;padding:10px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg2);color:var(--tx);font-family:inherit"><option value="">Seleccionar...</option></select></div>
+    <div style="margin-bottom:12px"><label style="font-size:12px;color:var(--tx2);margin-bottom:4px;display:block">Fecha</label><input type="date" id="lc-fec" style="width:100%;font-size:14px;padding:10px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg2);color:var(--tx);font-family:inherit"></div>
+    <div style="margin-bottom:16px"><label style="font-size:12px;color:var(--tx2);margin-bottom:4px;display:block">Comentario</label><textarea id="lc-com" rows="5" placeholder="Observaciones generales de la cancha..." style="width:100%;font-size:14px;padding:10px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg2);color:var(--tx);font-family:inherit;resize:vertical"></textarea></div>
+    <div style="display:flex;gap:10px"><button onclick="CM3('mlibro-campo')" style="flex:1;padding:12px;border-radius:var(--br);border:0.5px solid var(--bo2);background:none;font-size:14px;cursor:pointer;font-family:inherit">Cancelar</button><button onclick="saveLibroCampo()" style="flex:1;padding:12px;border-radius:var(--br);border:none;background:var(--blue);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Guardar</button></div>
   </div>
 </div>
 </body>
