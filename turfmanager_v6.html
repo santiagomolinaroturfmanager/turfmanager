@@ -221,7 +221,10 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
       <i class="ti ti-leaf" style="color:var(--blue);font-size:24px"></i>
       <span style="font-size:18px;font-weight:700">TurfManager</span>
     </div>
-    <div style="font-size:13px;color:var(--tx2);margin-bottom:16px">Ingresá tu contraseña para continuar</div>
+    <div style="font-size:13px;color:var(--tx2);margin-bottom:16px">Ingresá tus datos para continuar</div>
+    <input type="text" id="admin-user" placeholder="Usuario (admin o encargado)" autocapitalize="none" autocomplete="username"
+      style="width:100%;padding:12px 14px;font-size:15px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg2);color:var(--tx);font-family:inherit;margin-bottom:8px;box-sizing:border-box"
+      onkeydown="if(event.key==='Enter')document.getElementById('admin-pass').focus()">
     <input type="password" id="admin-pass" placeholder="Contraseña"
       style="width:100%;padding:12px 14px;font-size:15px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg2);color:var(--tx);font-family:inherit;margin-bottom:8px;box-sizing:border-box"
       onkeydown="if(event.key==='Enter')checkAdminPass()">
@@ -247,7 +250,8 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
     <button onclick="ST('alr')">Alertas <span id="alrbadge" style="display:none;background:#E8A838;color:#fff;border-radius:9px;padding:0 5px;font-size:9px;margin-left:2px"></span></button>
     <button onclick="ST('rec')">Recurrentes</button>
     <button onclick="ST('libro')">📓 Libro</button>
-    <button onclick="ST('cfg')">Ajustes</button>
+    <button id="nav-cfg-btn" onclick="ST('cfg')">Ajustes</button>
+    <button onclick="cerrarSesionWeb()" style="color:var(--red)" title="Cerrar sesión">⏻ Salir</button>
   </div>
   <div class="wnav ml-auto" id="wn">
     <button onclick="CW(-1)"><i class="ti ti-chevron-left"></i></button>
@@ -343,6 +347,10 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
       <h2><i class="ti ti-chart-bar" style="vertical-align:-2px;margin-right:4px"></i>Resumen mensual</h2>
       <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
         <button onclick="exportResumen()" class="btn sm" style="display:flex;align-items:center;gap:5px"><i class="ti ti-file-spreadsheet"></i> Excel</button>
+        <div style="display:flex;border:0.5px solid var(--bo2);border-radius:var(--br);overflow:hidden">
+          <button id="rv-mes" onclick="setResumenView('mes')" style="font-size:11px;padding:3px 12px;border:none;background:var(--blue);color:#fff;cursor:pointer;font-family:inherit">Mes</button>
+          <button id="rv-anio" onclick="setResumenView('anio')" style="font-size:11px;padding:3px 12px;border:none;background:var(--bg2);color:var(--tx2);cursor:pointer;font-family:inherit">Año</button>
+        </div>
         <div class="wnav"><button onclick="CM2R(-1)"><i class="ti ti-chevron-left"></i></button><span id="mlbl-r" style="font-size:12px;color:var(--tx2);min-width:90px;text-align:center"></span><button onclick="CM2R(1)"><i class="ti ti-chevron-right"></i></button></div>
       </div>
     </div>
@@ -721,6 +729,7 @@ let nxNov=3;
 let cMon=gMon(new Date()),cTab='semana';
 let cMonth=new Date().getMonth(),cYear=new Date().getFullYear();
 let cMonthR=new Date().getMonth(),cYearR=new Date().getFullYear();
+let _resumenView='mes';
 let selId=null,editingId=null,isRec=false,dragId=null;
 function fmtTime(el){
   var v=el.value.replace(/[^0-9]/g,'');
@@ -817,7 +826,18 @@ function CM(n){cMonth+=n;if(cMonth>11){cMonth=0;cYear++;}if(cMonth<0){cMonth=11;
 function CM3(id){document.getElementById(id).style.display='none';}
 function CWF(n){cFMon=aD(cFMon,n*7);RF();}
 function GTF(){cFMon=gMon(new Date());RF();}
-function CM2R(n){cMonthR+=n;if(cMonthR>11){cMonthR=0;cYearR++;}if(cMonthR<0){cMonthR=11;cYearR--;}renderResumen();}
+function CM2R(n){
+  if(_resumenView==='anio'){cYearR+=n;}
+  else{cMonthR+=n;if(cMonthR>11){cMonthR=0;cYearR++;}if(cMonthR<0){cMonthR=11;cYearR--;}}
+  renderResumen();
+}
+function setResumenView(v){
+  _resumenView=v;
+  var bm=document.getElementById('rv-mes'),ba=document.getElementById('rv-anio');
+  if(bm){bm.style.background=v==='mes'?'var(--blue)':'var(--bg2)';bm.style.color=v==='mes'?'#fff':'var(--tx2)';}
+  if(ba){ba.style.background=v==='anio'?'var(--blue)':'var(--bg2)';ba.style.color=v==='anio'?'#fff':'var(--tx2)';}
+  renderResumen();
+}
 function getPlanRows(isSint){var tarList=isSint?tiposTareaSint:tiposTarea;var base=[{label:'Lluvia (mm)',key:'_lluvia',type:'sum'},{label:'Temperatura media (C)',key:'_temp',type:'avg'},{label:'Heladas',key:'_heladas',type:'hel'}].concat(tarList.map(function(t){return{label:t,key:t,type:'count'};}));if(!planRowOrder||planRowOrder.length!==base.length)planRowOrder=base.map(function(_,i){return i;});return planRowOrder.map(function(i){return base[i];}); }
 
 // ================================================================
@@ -948,6 +968,8 @@ function gFilt(){
   var tipoVals=getMSelVals('msel-tipo-drop');
   return tasks.filter(function(t){
     if(t.est==='cancelada')return false;
+    // Encargado: only see their clients
+    if(webIsEncargado&&webClientes.indexOf(t.cli)<0)return false;
     if(cliVals.length&&cliVals.indexOf(String(t.cli))<0)return false;
     if(funVals.length&&!funVals.some(function(f){return tFuns(t).indexOf(f)>=0;}))return false;
     if(estVals.length&&estVals.indexOf(t.est)<0)return false;
@@ -1042,8 +1064,20 @@ function render(){
     semanaEl.innerHTML=h;
   }
 }
-function setRain(fec,val){const v=parseFloat(val)||0;if(v>0)lluviaData[fec]=v;else delete lluviaData[fec];}
-function setHelada(ds,v){heladasData[ds]=v||null;saveStateLocal();render();}
+function setRain(fec,val){const v=parseFloat(val)||0;if(v>0)lluviaData[fec]=v;else delete lluviaData[fec];saveStateLocal();saveWeatherToSupabase();}
+var _weatherSaveTimer=null;
+function saveWeatherToSupabase(){
+  // Debounce to avoid spamming on rapid edits
+  if(_weatherSaveTimer)clearTimeout(_weatherSaveTimer);
+  _weatherSaveTimer=setTimeout(function(){
+    sbUpsert('configuracion',[
+      {clave:'lluvia_data',valor:lluviaData},
+      {clave:'heladas_data',valor:heladasData},
+      {clave:'temp_data',valor:tempData}
+    ]).catch(function(e){console.warn('saveWeather error',e);});
+  },800);
+}
+function setHelada(ds,v){heladasData[ds]=v||null;if(!v)delete heladasData[ds];saveStateLocal();saveWeatherToSupabase();render();}
 function openRainModal(){document.getElementById('rain-fec').value=fD(new Date());document.getElementById('rain-mm').value='';document.getElementById('mrain').style.display='flex';}
 function SVRain(){const fec=document.getElementById('rain-fec').value;const mm=parseFloat(document.getElementById('rain-mm').value)||0;if(!fec)return;if(mm>0)lluviaData[fec]=mm;else delete lluviaData[fec];CM3('mrain');render();}
 var _holdTimer=null,_holdId=null;
@@ -1113,10 +1147,10 @@ function SVTMaquinaria(){
     var dias2=[...document.querySelectorAll('#ndp-svc input:checked')].map(function(b){return parseInt(b.value);});
     if(!dias2.length){alert('Seleccioná al menos un día');return;}
     var hasta=document.getElementById('nrec-hasta-svc').value||new Date().getFullYear()+'-12-31';
-    recs.push({id:nxRec++,dias:dias2,hasta:hasta,...base,fec:fec});
+    var _newRec1={id:nextRecId(),dias:dias2,hasta:hasta,...base,fec:fec};recs.push(_newRec1);saveRecToSupabase(_newRec1);
     GRT();CM3('mnew');saveState();renderRec();ST('rec');
   } else {
-    var newTask={id:nxId++,...base,fec:fec,est:'pendiente',obs:obs,recId:null,hsIni:null,hsFin:null,_dirty:true};
+    var newTask={id:nextTaskId(),...base,fec:fec,est:'pendiente',obs:obs,recId:null,hsIni:null,hsFin:null,_dirty:true};
     tasks.push(newTask);
     saveTaskToSupabase(newTask);
     CM3('mnew');saveState();render();
@@ -1148,9 +1182,38 @@ function setNTipo(tipo){
     if(dateEl&&!dateEl.value)dateEl.value=fD(new Date());
   }
 }
+function nFilterFunsForMaq(m){
+  var funWrap=document.getElementById('nfun-checks-svc');
+  if(!funWrap)return;
+  // Preserve currently checked funcionarios
+  var checked={};
+  funWrap.querySelectorAll('input:checked').forEach(function(i){checked[i.value]=true;});
+  var maqCli=(m&&m.scope==='cliente'&&m.cliId)?m.cliId:null;
+  var listaFuns=funcionarios.filter(function(f){
+    if(maqCli){
+      // Machine assigned to a client: only funcionarios of that client
+      return f.clientes&&f.clientes.indexOf(maqCli)>=0;
+    } else {
+      // General machine: all funcionarios EXCEPT exclusive ones
+      return !f.exclusivo;
+    }
+  });
+  funWrap.innerHTML='';
+  listaFuns.forEach(function(f){
+    var lbl=document.createElement('label');
+    lbl.style.cssText='display:flex;align-items:center;gap:5px;font-size:12px;padding:3px 8px;border:0.5px solid var(--bo2);border-radius:4px;cursor:pointer;background:var(--bg2)';
+    var isChecked=checked[f.nombre]?' checked':'';
+    lbl.innerHTML='<input type="checkbox" value="'+f.nombre+'"'+isChecked+' style="accent-color:var(--blue)"> '+f.nombre;
+    funWrap.appendChild(lbl);
+  });
+  if(!listaFuns.length){funWrap.innerHTML='<span style="font-size:12px;color:var(--tx3)">Sin funcionarios disponibles para esta máquina</span>';}
+}
+
 function nLoadSvcChecks(){
   var maqNom=document.getElementById('nmaq-svc').value;
   var m=maquinas.find(function(x){return x.nombre===maqNom;});
+  // Filter funcionarios based on the machine's client
+  nFilterFunsForMaq(m);
   var wrap=document.getElementById('nsvc-checks-wrap');
   var checksEl=document.getElementById('nsvc-checks');
   if(!m){wrap.style.display='none';return;}
@@ -2203,14 +2266,19 @@ function exportResumen(){
   }
 }
 function renderResumen(){
-  document.getElementById('mlbl-r').textContent=MES[cMonthR]+' '+cYearR;
+  var isYear=_resumenView==='anio';
+  document.getElementById('mlbl-r').textContent=isYear?('Año '+cYearR):(MES[cMonthR]+' '+cYearR);
+  var hdr=document.querySelector('#tab-resumen h2');
+  if(hdr)hdr.innerHTML='<i class="ti ti-chart-bar" style="vertical-align:-2px;margin-right:4px"></i>'+(isYear?'Resumen anual':'Resumen mensual');
   const mt=tasks.filter(t=>{
     if(t.est!=='completada')return false;
-    const d=new Date(t.fec+'T12:00');return d.getMonth()===cMonthR&&d.getFullYear()===cYearR;
+    const d=new Date(t.fec+'T12:00');
+    if(isYear)return d.getFullYear()===cYearR;
+    return d.getMonth()===cMonthR&&d.getFullYear()===cYearR;
   });
   let h='';
   if(!mt.length){
-    h=`<div class="empty">Sin tareas completadas en ${MES[cMonthR]} ${cYearR}</div>`;
+    h=`<div class="empty">Sin tareas completadas en ${isYear?('el año '+cYearR):(MES[cMonthR]+' '+cYearR)}</div>`;
     document.getElementById('resumen-ct').innerHTML=h;return;
   }
   // Per client summary
@@ -2235,7 +2303,7 @@ function renderResumen(){
     h+=`</div>`;
   }
   // Novedades del mes
-  const novMes=novs.filter(n=>{const d=new Date(n.fec+'T12:00');return d.getMonth()===cMonthR&&d.getFullYear()===cYearR&&n.tipo==='anomalia';});
+  const novMes=novs.filter(n=>{const d=new Date(n.fec+'T12:00');return (isYear?d.getFullYear()===cYearR:(d.getMonth()===cMonthR&&d.getFullYear()===cYearR))&&n.tipo==='anomalia';});
   if(novMes.length){
     h+=`<div class="resumen-card" style="grid-column:span 2"><h3><i class="ti ti-alert-triangle" style="color:#E24B4A"></i> Novedades / anomalías</h3>`;
     novMes.forEach(n=>{const d=new Date(n.fec+'T12:00');h+=`<div class="resumen-stat"><span>${n.fun} · ${d.getDate()}/${d.getMonth()+1}</span><strong style="font-size:12px;font-weight:400">${n.txt}</strong></div>`;});
@@ -2246,7 +2314,7 @@ function renderResumen(){
   const totalComp=mt.length;
   h+=`<div style="background:var(--bg);border:0.5px solid var(--bo);border-radius:var(--brl);padding:14px;margin-top:2px">
     <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px">
-      <span><strong>${totalComp}</strong> tareas completadas en ${MES[cMonthR]}</span>
+      <span><strong>${totalComp}</strong> tareas completadas en ${isYear?('el año '+cYearR):MES[cMonthR]}</span>
       <span><strong>${clientes.filter(c=>mt.some(t=>t.cli===c.id)).length}</strong> clientes activos</span>
       <span><strong>${[...new Set(mt.map(t=>t.fun))].length}</strong> funcionarios</span>
       ${Object.keys(maqUsed).length?`<span><strong>${Object.values(maqUsed).reduce((a,b)=>a+b,0).toFixed(1)} hs</strong> de máquinas</span>`:''}
@@ -2539,14 +2607,29 @@ function SVT(){
     if(isDup){alert('Ya existe una recurrente identica.');return;}
     var hasta2=document.getElementById('nrec-hasta').value||new Date().getFullYear()+'-12-31';
     var maxDate=fD(aD(new Date(),365));if(hasta2>maxDate)hasta2=maxDate;
-    recs.push({id:nxRec++,dias:dias2,hasta:hasta2,...base});
+    var _newRec2={id:nextRecId(),dias:dias2,hasta:hasta2,...base};recs.push(_newRec2);saveRecToSupabase(_newRec2);
     GRT();CM3('mnew');saveState();renderRec();ST('rec');
   } else {
-    var newTask={id:nxId++,...base,fec:fec,est:'pendiente',obs:'',recId:null,chk:{},hsIni:null,hsFin:null,_dirty:true};
+    var newTask={id:nextTaskId(),...base,fec:fec,est:'pendiente',obs:'',recId:null,chk:{},hsIni:null,hsFin:null,_dirty:true};
     tasks.push(newTask);
     saveTaskToSupabase(newTask);
     CM3('mnew');saveState();render();
   }
+}
+function nextRecId(){
+  var maxLocal=recs.length?Math.max.apply(null,recs.map(function(x){return x.id;})):0;
+  if(nxRec<=maxLocal)nxRec=maxLocal+1;
+  if(webIsEncargado&&nxRec<1000000){nxRec=Math.max(nxRec,1000000+Math.floor(Math.random()*1000000));}
+  return nxRec++;
+}
+function nextTaskId(){
+  // Base id on tasks in memory
+  var maxLocal=tasks.length?Math.max.apply(null,tasks.map(function(x){return x.id;})):0;
+  if(nxId<=maxLocal)nxId=maxLocal+1;
+  // For encargados (partial data), offset into a high range to avoid colliding with
+  // other clients' tasks that aren't loaded in memory.
+  if(webIsEncargado&&nxId<1000000){nxId=Math.max(nxId,1000000+Math.floor(Math.random()*1000000));}
+  return nxId++;
 }
 function GRT(){
   const tod=new Date();tod.setHours(0,0,0,0);
@@ -2577,24 +2660,57 @@ function GRT(){
         if(existingKeys[key])return;
         // Mark as existing NOW so we never create it twice in this same run
         existingKeys[key]=true;
-        var newTask={id:nxId++,cli:r.cli,can:r.can,tar:r.tar,
+        // Copy checklist template from recurrente (reset all to false)
+        var chkTemplate={};
+        if(r.chk&&typeof r.chk==='object'){Object.keys(r.chk).forEach(function(k){chkTemplate[k]=false;});}
+        var newTask={id:nextTaskId(),cli:r.cli,can:r.can,tar:r.tar,
           funs:(r.funs&&r.funs.length?r.funs:(r.fun?[r.fun]:[])),
           maq:r.maq||'',maq2:r.maq2||'',fec:ds,des:r.des,has:r.has,spc:r.spc||'',
-          est:'pendiente',obs:'',recId:r.id,chk:{},hsIni:null,hsFin:null};
+          est:'pendiente',obs:'',recId:r.id,chk:chkTemplate,hsIni:null,hsFin:null};
         tasks.push(newTask);
         newTasks.push(newTask);
       });
       weekStart=aD(weekStart,7);
     }
   });
-  // Save newly generated tasks to Supabase
-  if(newTasks.length){
-    var rows=newTasks.map(function(t){return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,
+  // Sync existing PENDING tasks with their recurrente (horario, funcionarios, checklist)
+  // This self-heals any task that drifted from its recurrente definition.
+  var recById={};recs.forEach(function(r){recById[r.id]=r;});
+  var syncedTasks=[];
+  tasks.forEach(function(t){
+    if(!t.recId||t.est!=='pendiente')return;
+    var r=recById[t.recId];
+    if(!r)return;
+    var changed=false;
+    // Sync horario
+    if(t.has!==r.has){t.has=r.has;changed=true;}
+    // Sync funcionarios only if task has none but rec does (don't override manual reassignment)
+    // Sync checklist: ensure task has all items from recurrente's template
+    if(r.chk&&typeof r.chk==='object'){
+      var recKeys=Object.keys(r.chk);
+      var taskChk=t.chk&&typeof t.chk==='object'?t.chk:{};
+      var taskKeys=Object.keys(taskChk);
+      // If keys differ, rebuild preserving completion state of matching items
+      var needsSync=recKeys.length!==taskKeys.length||recKeys.some(function(k){return !(k in taskChk);});
+      if(needsSync){
+        var merged={};
+        recKeys.forEach(function(k){merged[k]=(k in taskChk)?taskChk[k]:false;});
+        t.chk=merged;changed=true;
+      }
+    }
+    // Sync client from recurrente (for machine tasks that had null cli)
+    if((t.cli===null||t.cli===undefined)&&r.cli){t.cli=r.cli;changed=true;}
+    if(changed){t._dirty=true;syncedTasks.push(t);}
+  });
+  // Save newly generated + synced tasks to Supabase
+  var toSave=newTasks.concat(syncedTasks);
+  if(toSave.length){
+    var rows=toSave.map(function(t){return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,
       funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,
-      spc:t.spc||'',est:'pendiente',obs:'',rec_id:t.recId||null,
-      chk:{},hs_ini:null,hs_fin:null};});
+      spc:t.spc||'',est:t.est||'pendiente',obs:t.obs||'',rec_id:t.recId||null,
+      chk:t.chk||{},hs_ini:t.hsIni||null,hs_fin:t.hsFin||null};});
     sbUpsert('tareas',rows).then(function(){
-      console.log('GRT saved '+newTasks.length+' tasks to Supabase');
+      console.log('GRT saved/synced '+toSave.length+' tasks ('+newTasks.length+' new, '+syncedTasks.length+' synced)');
     }).catch(function(e){console.warn('GRT save error',e);});
   }
 }
@@ -2688,7 +2804,7 @@ function MDone(){
 }
 function saveRecToSupabase(r){
   if(!r)return;
-  var row={id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias,hasta:r.hasta,skip:r.skip||[]};
+  var row={id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias,hasta:r.hasta,skip:r.skip||[],chk:r.chk||{}};
   return sbUpsert('recurrentes',[row]).catch(function(e){console.warn('saveRecToSupabase error',e);});
 }
 function saveTaskToSupabase(t){
@@ -2764,7 +2880,7 @@ function delCliente(id){if(!confirm('¿Eliminar?'))return;clientes=clientes.filt
 var _editFunId=null;
 function saveFunToSupabase(f){
   if(!f)return;
-  var row={id:f.id,nombre:f.nombre,username:f.username||f.nombre.split(' ')[0].toLowerCase(),password:f.password||'',clientes:f.clientes,encargado:f.encargado||false};
+  var row={id:f.id,nombre:f.nombre,username:f.username||f.nombre.split(' ')[0].toLowerCase(),password:f.password||'',clientes:f.clientes,encargado:f.encargado||false,exclusivo:f.exclusivo||false};
   return sbUpsert('funcionarios',[row]).catch(function(e){console.warn('saveFunToSupabase error',e);});
 }
 function editFuncionario(id){
@@ -2774,6 +2890,8 @@ function editFuncionario(id){
   document.getElementById('efun-user').value=f.username||f.nombre.split(' ')[0].toLowerCase();
   var encEl=document.getElementById('efun-encargado');
   if(encEl)encEl.checked=!!f.encargado;
+  var exEl=document.getElementById('efun-exclusivo');
+  if(exEl)exEl.checked=!!f.exclusivo;
   document.getElementById('mefun').style.display='flex';
 }
 function saveEditFun(){
@@ -2789,6 +2907,8 @@ function saveEditFun(){
   if(passEl)passEl.value='';
   var encEl=document.getElementById('efun-encargado');
   f.encargado=encEl?encEl.checked:false;
+  var exEl=document.getElementById('efun-exclusivo');
+  f.exclusivo=exEl?exEl.checked:false;
   saveFunToSupabase(f);
   CM3('mefun');saveState();rebuildSelects();renderCfg();
 }
@@ -3349,6 +3469,8 @@ function saveState() {
 }
 
 async function syncToSupabase(){
+  // Encargados have partial data (only their clients) - never mass-sync or they'd wipe other clients
+  if(webIsEncargado){return;}
   if(!navigator.onLine){sbPendingSync=true;setSBStatus(false);return;}
   // Don't sync if critical data isn't loaded yet
   if(!clientes.length&&!tasks.length&&!maquinas.length){
@@ -3361,7 +3483,7 @@ async function syncToSupabase(){
     await Promise.all([
       // Tasks are saved individually via saveTaskToSupabase() — never via bulk sync
       Promise.resolve(),
-      (recs.length?syncTable('recurrentes',recs.map(function(r){return{id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias,hasta:r.hasta,skip:r.skip||[]};})):Promise.resolve()),
+      (recs.length?syncTable('recurrentes',recs.map(function(r){return{id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias,hasta:r.hasta,skip:r.skip||[],chk:r.chk||{}};})):Promise.resolve()),
       syncTable('novedades',novs.map(function(n){return{id:n.id,tipo:n.tipo,fun:n.fun,txt:n.txt,fec:n.fec,leida:n.leida};})),
       syncTable('alertas',alertas.map(function(a){return{id:a.id,descripcion:a.desc||a.descripcion||'',tipo:a.tipo,dias:a.dias,ref:a.ref||'',ctx:a.ctx||'',notes:a.notes||'',fecha:a.fecha||null,estado:a.estado,leida:a.leida};})),
       syncTable('maquinas',maquinas.map(function(m){return{id:m.id,nombre:m.nombre,tipo:m.tipo,marca:m.marca||'',cat:m.cat||'general',scope:m.scope,cli_id:m.cliId||null,hs:m.hs,intervalo:m.intervalo,proximo:m.proximo,tareas:m.tareas,svc_tareas:m.svcTareas||[],hist:m.hist||[]};})),
@@ -3369,7 +3491,7 @@ async function syncToSupabase(){
     ]);
     // Step 2: upsert-only for clientes/funcionarios (FK constraints prevent delete)
     if(clientes.length) await sbUpsert('clientes',clientes);
-    if(funcionarios.length) await sbUpsert('funcionarios',funcionarios.map(function(f){return{id:f.id,nombre:f.nombre,username:f.username||f.nombre.split(' ')[0].toLowerCase(),password:f.password||'',clientes:f.clientes,encargado:f.encargado||false};}));
+    if(funcionarios.length) await sbUpsert('funcionarios',funcionarios.map(function(f){return{id:f.id,nombre:f.nombre,username:f.username||f.nombre.split(' ')[0].toLowerCase(),password:f.password||'',clientes:f.clientes,encargado:f.encargado||false,exclusivo:f.exclusivo||false};}));
     setSBStatus(true);
   } catch(e){
     console.warn('Supabase sync failed:',e);
@@ -3399,7 +3521,10 @@ async function syncConfig(){
     {clave:'tipos_tarea_sint',valor:tiposTareaSint},
     {clave:'tipos_maquina',valor:tiposMaquina},
     {clave:'svc_tareas',valor:SVC_TAREAS},
-    {clave:'checklists',valor:checklists}
+    {clave:'checklists',valor:checklists},
+    {clave:'lluvia_data',valor:lluviaData},
+    {clave:'heladas_data',valor:heladasData},
+    {clave:'temp_data',valor:tempData}
   ]);
 }
 
@@ -3453,14 +3578,27 @@ async function loadFromSupabase(){
       sbGet('configuracion','select=*')
     ]);
     clientes=cliRows;
+    // Encargado: restrict to their clients only
+    if(webIsEncargado&&webClientes.length){
+      clientes=clientes.filter(function(c){return webClientes.indexOf(c.id)>=0;});
+    }
     funcionarios=funRows;
     maquinas=maqRows.map(function(m){return{id:m.id,nombre:m.nombre,tipo:m.tipo,marca:m.marca||'',cat:m.cat||'general',scope:m.scope,cliId:m.cli_id,hs:m.hs,intervalo:m.intervalo,proximo:m.proximo,tareas:m.tareas||[],svcTareas:m.svc_tareas||[],hist:m.hist||[]};});
     tasks=tarRows.map(function(t){return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',recId:t.rec_id,chk:t.chk||{},hsIni:t.hs_ini,hsFin:t.hs_fin,compPor:t.comp_por||null};})
     var actRows=await sbGet('actividades','select=*&order=fec,des');
     acts=actRows.map(function(a){return{id:a.id,cli:a.cli||null,fec:a.fec,can:a.can,des:a.des,has:a.has,tipo:a.tipo,detalle:a.detalle};});
     await loadLibro();
+    // Encargado: restrict all data to their clients
+    if(webIsEncargado&&webClientes.length){
+      tasks=tasks.filter(function(t){return webClientes.indexOf(t.cli)>=0;});
+      acts=acts.filter(function(a){return a.cli===null||webClientes.indexOf(a.cli)>=0;});
+      recs=recs.filter(function(r){return webClientes.indexOf(r.cli)>=0;});
+      maquinas=maquinas.filter(function(m){return m.scope!=='cliente'||webClientes.indexOf(m.cliId)>=0;});
+      libroEntradas=libroEntradas.filter(function(e){return webClientes.indexOf(e.cli)>=0;});
+      funcionarios=funcionarios.filter(function(f){return !f.clientes||f.clientes.some(function(c){return webClientes.indexOf(c)>=0;});});
+    }
     nxAct=acts.length?Math.max.apply(null,acts.map(function(a){return a.id;}))+1:1;;
-    recs=recRows.map(function(r){return{id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias||[],hasta:r.hasta,skip:r.skip||[]};});
+    recs=recRows.map(function(r){return{id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias||[],hasta:r.hasta,skip:r.skip||[],chk:r.chk||{}};});
     novs=novRows.map(function(n){return{id:n.id,tipo:n.tipo,fun:n.fun,txt:n.txt,fec:n.fec,leida:n.leida};});
     alertas=alrRows.map(function(a){return{id:a.id,desc:a.descripcion,tipo:a.tipo,dias:a.dias,ref:a.ref||'',ctx:a.ctx||'',notes:a.notes||'',fecha:a.fecha||'',estado:a.estado,leida:a.leida};});
     cfgRows.forEach(function(c){
@@ -3469,6 +3607,9 @@ async function loadFromSupabase(){
       if(c.clave==='tipos_maquina')tiposMaquina=c.valor;
       if(c.clave==='svc_tareas')SVC_TAREAS=c.valor;
       if(c.clave==='checklists')checklists=c.valor;
+      if(c.clave==='lluvia_data'&&c.valor)lluviaData=c.valor;
+      if(c.clave==='heladas_data'&&c.valor)heladasData=c.valor;
+      if(c.clave==='temp_data'&&c.valor)tempData=c.valor;
     });
     if(clientes.length)nxCli=Math.max.apply(null,clientes.map(function(x){return x.id;}))+1;
     if(funcionarios.length)nxFun=Math.max.apply(null,funcionarios.map(function(x){return x.id;}))+1;
@@ -3568,18 +3709,65 @@ async function sha256(str){
   var buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
 }
+var webUser=null; // {nombre, encargado, clientes} - null means admin
+var webIsEncargado=false;
+var webClientes=[];
+
 async function checkAdminPass(){
+  var user=document.getElementById('admin-user').value.trim().toLowerCase();
   var pass=document.getElementById('admin-pass').value;
+  var errEl=document.getElementById('admin-pass-err');
+  // Admin path: user empty or 'admin' + admin password
   var hash=await sha256(pass);
-  if(hash===ADMIN_HASH){
+  if((user===''||user==='admin')&&hash===ADMIN_HASH){
+    webUser=null;webIsEncargado=false;webClientes=[];
     sessionStorage.setItem('admin_auth','1');
+    sessionStorage.removeItem('enc_auth');
     document.getElementById('login-screen').style.display='none';
     document.getElementById('app-screen').style.display='';
     init();
-  } else {
-    document.getElementById('admin-pass-err').style.display='block';
-    document.getElementById('admin-pass').value='';
-    document.getElementById('admin-pass').focus();
+    return;
+  }
+  // Encargado path: validate against funcionarios (need to load them first)
+  if(user&&user!=='admin'){
+    if(navigator.onLine){
+      try{
+        var funRows=await sbGet('funcionarios','select=*');
+        var fo=funRows.find(function(f){return (f.username||'').toLowerCase()===user;});
+        if(fo&&fo.encargado&&fo.password===pass){
+          webUser=fo.nombre;webIsEncargado=true;webClientes=fo.clientes||[];
+          sessionStorage.setItem('enc_auth',JSON.stringify({nombre:fo.nombre}));
+          sessionStorage.removeItem('admin_auth');
+          document.getElementById('login-screen').style.display='none';
+          document.getElementById('app-screen').style.display='';
+          applyEncargadoRestrictions();
+          init();
+          return;
+        }
+      }catch(e){console.warn('login enc error',e);}
+    }
+  }
+  // Failed
+  errEl.style.display='block';
+  document.getElementById('admin-pass').value='';
+  document.getElementById('admin-pass').focus();
+}
+
+function cerrarSesionWeb(){
+  if(!confirm('¿Cerrar sesión?'))return;
+  sessionStorage.removeItem('admin_auth');
+  sessionStorage.removeItem('enc_auth');
+  webUser=null;webIsEncargado=false;webClientes=[];
+  location.reload();
+}
+function applyEncargadoRestrictions(){
+  // Hide Ajustes tab for encargados
+  var cfgBtn=document.getElementById('nav-cfg-btn');
+  if(cfgBtn)cfgBtn.style.display=webIsEncargado?'none':'';
+  // Show encargado name/badge in the brand area
+  if(webIsEncargado){
+    var logoEl=document.querySelector('.topbar .logo');
+    if(logoEl)logoEl.innerHTML='<i class="ti ti-leaf"></i>TurfManager <span style="font-size:11px;font-weight:500;color:var(--tx3);margin-left:4px">· 👔 '+webUser+'</span>';
   }
 }
 // Start
@@ -3587,8 +3775,33 @@ if(sessionStorage.getItem('admin_auth')==='1'){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app-screen').style.display='';
   init();
+} else if(sessionStorage.getItem('enc_auth')){
+  // Restore encargado session
+  restoreEncargadoSession();
 } else {
   document.getElementById('admin-pass').focus();
+}
+
+async function restoreEncargadoSession(){
+  try{
+    var sess=JSON.parse(sessionStorage.getItem('enc_auth'));
+    var funRows=await sbGet('funcionarios','select=*');
+    var fo=funRows.find(function(f){return f.nombre===sess.nombre;});
+    if(fo&&fo.encargado){
+      webUser=fo.nombre;webIsEncargado=true;webClientes=fo.clientes||[];
+      document.getElementById('login-screen').style.display='none';
+      document.getElementById('app-screen').style.display='';
+      applyEncargadoRestrictions();
+      init();
+    } else {
+      sessionStorage.removeItem('enc_auth');
+      document.getElementById('admin-user').focus();
+    }
+  }catch(e){
+    console.warn('restore enc session error',e);
+    sessionStorage.removeItem('enc_auth');
+    document.getElementById('admin-user').focus();
+  }
 }
 updateAlrBadge();
 
@@ -3636,6 +3849,7 @@ _mutatingFns.forEach(name => {
   <div class="fr"><label>Usuario para login</label><input type="text" id="efun-user" placeholder="Ej: jorge" autocapitalize="none"></div>
   <div class="fr"><label>Contraseña (dejar vacío para no cambiar)</label><input type="password" id="efun-pass" placeholder="Nueva contraseña"></div>
   <div class="fr"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="efun-encargado" style="width:16px;height:16px;accent-color:var(--blue)"> <span>👔 Encargado (ve y asigna todas las tareas de sus clientes)</span></label></div>
+  <div class="fr"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="efun-exclusivo" style="width:16px;height:16px;accent-color:var(--blue)"> <span>🔒 Exclusivo de sus clientes (no aparece en tareas de otros clientes ni máquinas generales)</span></label></div>
   <div class="ma"><button onclick="CM3('mefun')">Cancelar</button><button class="bp" onclick="saveEditFun()">Guardar</button></div>
 </div></div>
 <!-- MODAL DRAG RECURRENTE -->

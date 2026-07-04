@@ -1216,8 +1216,9 @@ function getFunFilteredTasks(taskList){
   var tipoVal=tipoSel?tipoSel.value:'';
   if(tipoVal==='actividad')return[];
   return taskList.filter(function(t){
-    if(_ffbCli&&t.cli!==parseInt(_ffbCli))return false;
-    if(_ffbCan&&t.can!==_ffbCan)return false;
+    // Machine tasks with no client shouldn't be filtered out by client filter
+    if(_ffbCli&&t.cli!==parseInt(_ffbCli)&&!(t.tar==='Mant. Maquinaria'&&!t.cli))return false;
+    if(_ffbCan&&t.can&&t.can!==_ffbCan)return false;
     if(tipoVal==='canchas'&&t.tar==='Mant. Maquinaria')return false;
     if(tipoVal==='maquinaria'&&t.tar!=='Mant. Maquinaria')return false;
     return true;
