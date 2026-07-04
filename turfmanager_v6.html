@@ -1101,7 +1101,10 @@ function SVTMaquinaria(){
   var obs=document.getElementById('nsvc-obs').value||'';
   var svcChecks=[...document.querySelectorAll('#nsvc-checks input:checked')].map(function(i){return i.value;});
   var isRec=document.getElementById('nsvc-rec').checked;
-  var base={cli:null,can:'',tar:'Mant. Maquinaria',funs:funs,maq:maq,maq2:'',
+  // Inherit client from the machine (if assigned to a client)
+  var maqObj=maquinas.find(function(m){return m.nombre===maq;});
+  var maqCli=(maqObj&&maqObj.scope==='cliente'&&maqObj.cliId)?maqObj.cliId:null;
+  var base={cli:maqCli,can:'',tar:'Mant. Maquinaria',funs:funs,maq:maq,maq2:'',
     des:des,has:has,spc:obs,chk:{}};
   // Store svcChecks in spc field as JSON prefix for now
   // Actually store in chk field with all items
@@ -2627,6 +2630,7 @@ function OD(id){
     hsInfo+cflInfo+
     (t.recId?'<dt>Tipo</dt><dd style="color:var(--blue)">Recurrente</dd>':'')+
     (t.est==='completada'&&t.compPor?'<dt>Completada por</dt><dd style="color:var(--green);font-weight:600">'+t.compPor+'</dd>':'')+
+    (t.tar==='Mant. Maquinaria'&&t.chk&&Object.keys(t.chk).length?'<dt>Tareas de service</dt><dd>'+Object.keys(t.chk).map(function(k){return (t.chk[k]?'✅':'⬜')+' '+k;}).join('<br>')+'</dd>':'')+
     (t.obs?'<dt>Observaciones</dt><dd>'+t.obs+'</dd>':'');
   var done=t.est==='completada';
   document.getElementById('bdone').style.display=done?'none':'';

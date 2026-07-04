@@ -307,12 +307,23 @@ function toggleAsignar(taskId,funNombre){
 
 function taskForFun(t,funName){
   var fo=funcionarios.find(function(f){return f.nombre===funName;});
-  // Encargado sees ALL tasks of their clients regardless of assignment
+  var funs=tFuns(t);
+  // Encargado sees ALL tasks of their clients, OR tasks assigned to them directly
   if(fo&&fo.encargado&&fo.clientes){
-    return fo.clientes.indexOf(t.cli)>=0;
+    if(t.cli&&fo.clientes.indexOf(t.cli)>=0)return true; // task of their client
+    if(funs.indexOf(funName)>=0)return true; // assigned to encargado directly
+    // Task assigned to one of their operative funcionarios (e.g. machine task with no client)
+    if(funs.length){
+      var anyOfTeam=funs.some(function(fn){
+        var opf=funcionarios.find(function(f){return f.nombre===fn;});
+        if(!opf||!opf.clientes)return false;
+        return opf.clientes.some(function(c){return fo.clientes.indexOf(c)>=0;});
+      });
+      if(anyOfTeam)return true;
+    }
+    return false;
   }
   // Regular funcionario: assigned to them, OR unassigned and works for that client
-  var funs=tFuns(t);
   if(funs.length)return funs.indexOf(funName)>=0;
   if(!fo||!fo.clientes)return false;
   return fo.clientes.indexOf(t.cli)>=0;
