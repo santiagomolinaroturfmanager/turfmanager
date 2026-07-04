@@ -3600,15 +3600,6 @@ async function loadFromSupabase(){
     var actRows=await sbGet('actividades','select=*&order=fec,des');
     acts=actRows.map(function(a){return{id:a.id,cli:a.cli||null,fec:a.fec,can:a.can,des:a.des,has:a.has,tipo:a.tipo,detalle:a.detalle};});
     await loadLibro();
-    // Encargado: restrict all data to their clients
-    if(webIsEncargado&&webClientes.length){
-      tasks=tasks.filter(function(t){return webClientes.indexOf(t.cli)>=0;});
-      acts=acts.filter(function(a){return a.cli===null||webClientes.indexOf(a.cli)>=0;});
-      recs=recs.filter(function(r){return webClientes.indexOf(r.cli)>=0;});
-      maquinas=maquinas.filter(function(m){return m.scope!=='cliente'||webClientes.indexOf(m.cliId)>=0;});
-      libroEntradas=libroEntradas.filter(function(e){return webClientes.indexOf(e.cli)>=0;});
-      funcionarios=funcionarios.filter(function(f){return !f.clientes||f.clientes.some(function(c){return webClientes.indexOf(c)>=0;});});
-    }
     nxAct=acts.length?Math.max.apply(null,acts.map(function(a){return a.id;}))+1:1;;
     recs=recRows.map(function(r){return{id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias||[],hasta:r.hasta,skip:r.skip||[],chk:r.chk||{}};});
     novs=novRows.map(function(n){return{id:n.id,tipo:n.tipo,fun:n.fun,txt:n.txt,fec:n.fec,leida:n.leida};});
@@ -3630,6 +3621,15 @@ async function loadFromSupabase(){
     if(recs.length)nxRec=Math.max.apply(null,recs.map(function(x){return x.id;}))+1;
     if(novs.length)nxNov=Math.max.apply(null,novs.map(function(x){return x.id;}))+1;
     if(alertas.length)nxAlr=Math.max.apply(null,alertas.map(function(x){return x.id;}))+1;
+    // Encargado: restrict all data to their clients
+    if(webIsEncargado&&webClientes.length){
+      tasks=tasks.filter(function(t){return webClientes.indexOf(t.cli)>=0;});
+      acts=acts.filter(function(a){return a.cli===null||webClientes.indexOf(a.cli)>=0;});
+      recs=recs.filter(function(r){return webClientes.indexOf(r.cli)>=0;});
+      maquinas=maquinas.filter(function(m){return m.scope!=='cliente'||webClientes.indexOf(m.cliId)>=0;});
+      libroEntradas=libroEntradas.filter(function(e){return webClientes.indexOf(e.cli)>=0;});
+      funcionarios=funcionarios.filter(function(f){return !f.clientes||f.clientes.some(function(c){return webClientes.indexOf(c)>=0;});});
+    }
     saveStateLocal();
     setSBStatus(true);
     return true;
