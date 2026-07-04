@@ -3423,9 +3423,21 @@ function setSBStatus(online){
   else{el.textContent='○ Sin conexion';el.style.color='#E8A838';}
 }
 async function sbGet(table,params){
-  var r=await fetch(SB_URL+'/rest/v1/'+table+'?'+(params||'select=*'),{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
-  if(!r.ok)throw new Error(await r.text());
-  return r.json();
+  // Fetch ALL rows in batches to bypass Supabase's default 1000-row limit.
+  var all=[];
+  var offset=0;
+  var pageSize=1000;
+  while(true){
+    var rangeHeader={'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Range-Unit':'items','Range':offset+'-'+(offset+pageSize-1)};
+    var r=await fetch(SB_URL+'/rest/v1/'+table+'?'+(params||'select=*'),{headers:rangeHeader});
+    if(!r.ok)throw new Error(await r.text());
+    var batch=await r.json();
+    all=all.concat(batch);
+    if(batch.length<pageSize)break; // last page
+    offset+=pageSize;
+    if(offset>100000)break; // safety cap
+  }
+  return all;
 }
 async function sbPost(table,body){
   var r=await fetch(SB_URL+'/rest/v1/'+table,{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify(body)});

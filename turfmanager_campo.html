@@ -261,9 +261,20 @@ const SB_KEY='sb_publishable_DW9Wvf4kOHMOBo-aA-W3tw_jjafLqPA';
 var sbOnline=true;
 
 async function sbGet(table,params){
-  var r=await fetch(SB_URL+'/rest/v1/'+table+'?'+(params||'select=*'),{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
-  if(!r.ok)throw new Error(await r.text());
-  return r.json();
+  var all=[];
+  var offset=0;
+  var pageSize=1000;
+  while(true){
+    var rangeHeader={'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Range-Unit':'items','Range':offset+'-'+(offset+pageSize-1)};
+    var r=await fetch(SB_URL+'/rest/v1/'+table+'?'+(params||'select=*'),{headers:rangeHeader});
+    if(!r.ok)throw new Error(await r.text());
+    var batch=await r.json();
+    all=all.concat(batch);
+    if(batch.length<pageSize)break;
+    offset+=pageSize;
+    if(offset>100000)break;
+  }
+  return all;
 }
 async function sbUpsert(table,body){
   var bodyArr=Array.isArray(body)?body:[body];
