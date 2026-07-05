@@ -319,19 +319,10 @@ function toggleAsignar(taskId,funNombre){
 function taskForFun(t,funName){
   var fo=funcionarios.find(function(f){return f.nombre===funName;});
   var funs=tFuns(t);
-  // Encargado sees ALL tasks of their clients, OR tasks assigned to them directly
+  // Encargado sees ALL tasks of their clients (and machine tasks with no client assigned to them)
   if(fo&&fo.encargado&&fo.clientes){
     if(t.cli&&fo.clientes.indexOf(t.cli)>=0)return true; // task of their client
-    if(funs.indexOf(funName)>=0)return true; // assigned to encargado directly
-    // Task assigned to one of their operative funcionarios (e.g. machine task with no client)
-    if(funs.length){
-      var anyOfTeam=funs.some(function(fn){
-        var opf=funcionarios.find(function(f){return f.nombre===fn;});
-        if(!opf||!opf.clientes)return false;
-        return opf.clientes.some(function(c){return fo.clientes.indexOf(c)>=0;});
-      });
-      if(anyOfTeam)return true;
-    }
+    if(!t.cli&&funs.indexOf(funName)>=0)return true; // machine task w/o client assigned to encargado
     return false;
   }
   // Regular funcionario: assigned to them, OR unassigned and works for that client
@@ -466,6 +457,7 @@ function enterApp(nombre){
   document.getElementById('app-screen').style.display='flex';
   cMon=monday(new Date());
   cDay=fD(new Date());
+  _ffbCli='';_ffbCan='';
   render();
   if(!isAdmin)setTimeout(function(){initFunFilterBar();},300);
 }
@@ -1160,6 +1152,8 @@ function initFunFilterBar(){
   if(!funObj)return;
   var funClis=funObj.clientes||[];
   if(!funClis.length){bar.style.display='none';return;}
+  // Reset any stale filter that isn't one of this funcionario's clients
+  if(_ffbCli&&funClis.indexOf(parseInt(_ffbCli))<0)_ffbCli='';
   var cliWrap=document.getElementById('ffb-cli-wrap');
   var cliSel=document.getElementById('ffb-cli');
   // Show client filter only if funcionario has more than 1 client
