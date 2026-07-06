@@ -414,6 +414,10 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
       <div class="fr" style="margin-top:10px"><label>Programar hasta</label><input type="date" id="nrec-hasta"></div>
     </div>
     <div class="fr"><label>Especificaciones</label><input type="text" id="nspc" placeholder="Ej: 2.25mm · 50kg 30-0-20"></div>
+    <div class="fr" style="display:flex;align-items:center;gap:8px;margin-top:6px">
+      <input type="checkbox" id="ncanchas-rec" onchange="toggleCanchasRec()" style="accent-color:var(--blue);width:16px;height:16px">
+      <label for="ncanchas-rec" style="font-size:13px;cursor:pointer">Tarea recurrente</label>
+    </div>
     </div><!-- end ntipo-canchas-sec -->
     <!-- MAQUINARIA section -->
     <div id="ntipo-maquinaria-sec" style="display:none">
@@ -1231,6 +1235,15 @@ function nLoadSvcChecks(){
 }
 function toggleSvcDay(btn){
   btn.classList.toggle('sel');
+}
+function toggleCanchasRec(){
+  var isRec=document.getElementById('ncanchas-rec').checked;
+  document.getElementById('ndrow').style.display=isRec?'':'none';
+  if(isRec){
+    var y=new Date().getFullYear();
+    document.getElementById('nrec-hasta').value=y+'-12-31';
+    document.querySelectorAll('#ndp .dbt').forEach(function(b){b.classList.remove('sel');});
+  }
 }
 function toggleSvcRec(){
   var isRec=document.getElementById('nsvc-rec').checked;
@@ -2546,6 +2559,9 @@ function ONT(ir,taskId,prefillDate,prefillHour){
     document.querySelectorAll('#ndp .dbt').forEach(function(b){b.classList.remove('sel');});
     document.querySelectorAll('#nfun-checks input').forEach(function(inp){inp.checked=false;});
       }
+  // Sync canchas recurrente checkbox with the isRec state
+  var ncrEl=document.getElementById('ncanchas-rec');
+  if(ncrEl){ncrEl.checked=!!ir;}
   CM3('mdet');
   setNTipo('canchas');
   document.getElementById('mnew').style.display='flex';
@@ -2554,6 +2570,10 @@ function ONT(ir,taskId,prefillDate,prefillHour){
 function SVT(){
   // Handle Mant. Maquinaria separately
   if(_nTipo==='maquinaria'){SVTMaquinaria();return;}
+  // Canchas recurrente is driven by its own checkbox (unless editing an existing recurrente)
+  var ncanchasRecEl=document.getElementById('ncanchas-rec');
+  var recEditIdCheck=(document.getElementById('mnew').dataset.recEditId||'');
+  if(ncanchasRecEl&&!recEditIdCheck){isRec=ncanchasRecEl.checked;}
   var cid=parseInt(document.getElementById('ncli').value);
   if(!cid){alert('Selecciona un cliente');return;}
   var funs=getSelFuns();
