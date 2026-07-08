@@ -245,6 +245,7 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
     <button onclick="ST('nov')">🔔 Novedades <span id="nb" style="display:none;background:#E24B4A;color:#fff;border-radius:9px;padding:0 5px;font-size:9px;margin-left:2px"></span></button>
     <button onclick="ST('reg')">📋 Registro</button>
     <button onclick="ST('resumen')">📊 Resumen</button>
+    <button onclick="ST('consulta')">📋 Consulta</button>
     <button onclick="ST('maq')">⚙️ Maquinaria</button>
     <button onclick="ST('act')">⚽ Actividades</button>
     <button onclick="ST('alr')">Alertas <span id="alrbadge" style="display:none;background:#E8A838;color:#fff;border-radius:9px;padding:0 5px;font-size:9px;margin-left:2px"></span></button>
@@ -355,6 +356,29 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
       </div>
     </div>
     <div id="resumen-ct"></div>
+  </div>
+  <div id="tab-consulta" style="display:none">
+    <div class="sec-head">
+      <h2><i class="ti ti-list-search" style="vertical-align:-2px;margin-right:4px"></i>Consulta de tareas</h2>
+      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+        <button onclick="exportConsulta()" class="btn sm" style="display:flex;align-items:center;gap:5px"><i class="ti ti-file-spreadsheet"></i> Excel</button>
+        <div style="display:flex;border:0.5px solid var(--bo2);border-radius:var(--br);overflow:hidden">
+          <button id="cv-mes" onclick="setConVista('mes')" style="font-size:11px;padding:3px 12px;border:none;background:var(--bg2);color:var(--tx2);cursor:pointer;font-family:inherit">Mes</button>
+          <button id="cv-anio" onclick="setConVista('anio')" style="font-size:11px;padding:3px 12px;border:none;background:var(--blue);color:#fff;cursor:pointer;font-family:inherit">Año</button>
+        </div>
+        <div class="wnav"><button onclick="conNav(-1)"><i class="ti ti-chevron-left"></i></button><span id="con-lbl" style="font-size:12px;color:var(--tx2);min-width:90px;text-align:center"></span><button onclick="conNav(1)"><i class="ti ti-chevron-right"></i></button></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px;padding:12px;background:var(--bg2);border-radius:var(--br)">
+      <div><label style="font-size:11px;color:var(--tx2);display:block;margin-bottom:3px">Cliente</label>
+        <select id="con-cli" onchange="conOnCli()" style="font-size:13px;padding:6px 10px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg);color:var(--tx);font-family:inherit"></select></div>
+      <div id="con-can-wrap"><label style="font-size:11px;color:var(--tx2);display:block;margin-bottom:3px">Cancha</label>
+        <div class="msel-wrap" id="con-msel-can"><button class="msel-btn" onclick="toggleMSel('con-msel-can')"><span id="con-can-lbl">Todas</span> ▾</button><div class="msel-drop" id="con-can-drop"></div></div></div>
+      <div><label style="font-size:11px;color:var(--tx2);display:block;margin-bottom:3px">Tipo de tarea</label>
+        <div class="msel-wrap" id="con-msel-tar"><button class="msel-btn" onclick="toggleMSel('con-msel-tar')"><span id="con-tar-lbl">Todos</span> ▾</button><div class="msel-drop" id="con-tar-drop"></div></div></div>
+      <button onclick="conLimpiar()" class="btn sm" style="display:flex;align-items:center;gap:5px"><i class="ti ti-eraser"></i> Limpiar</button>
+    </div>
+    <div id="consulta-ct"></div>
   </div>
   <div id="tab-maq" style="display:none">
     <div class="sec-head"><h2><i class="ti ti-engine" style="vertical-align:-2px;margin-right:4px"></i>Maquinaria</h2><button class="btn primary" onclick="openMaqModal()"><i class="ti ti-plus"></i> Nueva máquina</button></div>
@@ -849,12 +873,12 @@ function getPlanRows(isSint){var tarList=isSint?tiposTareaSint:tiposTarea;var ba
 // ================================================================
 function ST(t){
   cTab=t;
-  const tabs=['semana','nov','reg','resumen','maq','act','alr','rec','libro','cfg'];
+  const tabs=['semana','nov','reg','resumen','consulta','maq','act','alr','rec','libro','cfg'];
   tabs.forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.style.display=x===t?'':'none';});
   document.querySelectorAll('.nav button').forEach((b,i)=>b.className=tabs[i]===t?'on':'');
   document.getElementById('fb').style.display=t==='semana'?'flex':'none';
   document.getElementById('wn').style.display=t==='semana'?'flex':'none';
-  document.getElementById('btnadd').style.display=['func','nov','maq','alr','rec','cfg','resumen'].includes(t)?'none':'';
+  document.getElementById('btnadd').style.display=['func','nov','maq','alr','rec','cfg','resumen','consulta'].includes(t)?'none':'';
   if(t==='reg')renderReg();
   if(t==='rec')renderRec();
   if(t==='func'){if(!cFun&&funcionarios.length)cFun=funcionarios[0].nombre;RF();}
@@ -865,6 +889,7 @@ function ST(t){
   if(t==='cfg')renderCfg();
   if(t==='libro'){renderLibro();populateLibroFilters();}
   if(t==='resumen')renderResumen();
+  if(t==='consulta'){populateConsultaFilters();renderConsulta();}
 }
 
 // ================================================================
@@ -1798,6 +1823,7 @@ var _pendingDrag=null;
 function recDragSolo(){
   if(!_pendingDrag)return;
   var t=tasks.find(function(x){return x.id===_pendingDrag.tid;});if(!t)return;
+  if(t.recId&&t.fec&&t.fec!==_pendingDrag.newFec)skipRecFecha(t.recId,t.fec);
   t.fec=_pendingDrag.newFec;t.des=_pendingDrag.newDes;t.has=_pendingDrag.newHas;
   t.recId=null;t._dirty=true;
   saveTaskToSupabase(t);
@@ -1975,6 +2001,7 @@ function COMP(id){
     }
   }
   t.est='completada';
+  t.compPor=webUser||'Admin';
   t._dirty=true;
   openCards[id]=false;
   var mainFun=tFuns(t)[0]||'?';
@@ -2278,6 +2305,174 @@ function exportResumen(){
     a.download='Resumen_'+monthStr+'.csv';a.click();
   }
 }
+// ════════ CONSULTA (listado detallado de tareas completadas) ════════
+var _conVista='anio';
+var _conYear=new Date().getFullYear();
+var _conMonth=new Date().getMonth();
+
+function populateConsultaFilters(){
+  var cliSel=document.getElementById('con-cli');
+  if(!cliSel)return;
+  var prevCli=cliSel.value;
+  var cliList=webIsEncargado?clientes.filter(function(c){return webClientes.indexOf(c.id)>=0;}):clientes;
+  cliSel.innerHTML='<option value="">Todos los clientes</option>';
+  cliList.forEach(function(c){var o=document.createElement('option');o.value=c.id;o.textContent=c.nombre;cliSel.appendChild(o);});
+  if(prevCli){var f=cliSel.querySelector('option[value="'+prevCli+'"]');if(f)cliSel.value=prevCli;}
+  // Tipos de tarea (multiselect): solo los que tienen tareas completadas (respeta scope encargado)
+  var tarDrop=document.getElementById('con-tar-drop');
+  var prevTar=getMSelVals('con-tar-drop');
+  var tarSet={};
+  tasks.forEach(function(t){
+    if(t.est!=='completada'||!t.tar)return;
+    if(webIsEncargado&&webClientes.indexOf(t.cli)<0)return;
+    tarSet[t.tar]=true;
+  });
+  tarDrop.innerHTML='';
+  Object.keys(tarSet).sort().forEach(function(t){
+    var lbl=document.createElement('label');lbl.className='msel-item';
+    var chk=prevTar.indexOf(t)>=0?' checked':'';
+    lbl.innerHTML='<input type="checkbox" value="'+t.replace(/"/g,'&quot;')+'"'+chk+' onchange="conTarChanged()"> '+t;
+    tarDrop.appendChild(lbl);
+  });
+  conTarChanged(true);
+  conOnCli();
+}
+function conTarChanged(skipRender){
+  var vals=getMSelVals('con-tar-drop');
+  var lbl=document.getElementById('con-tar-lbl');
+  if(!vals.length)lbl.textContent='Todos';
+  else if(vals.length===1)lbl.textContent=vals[0];
+  else lbl.textContent=vals.length+' tipos';
+  if(skipRender!==true)renderConsulta();
+}
+function conLimpiar(){
+  document.querySelectorAll('#con-can-drop input').forEach(function(i){i.checked=false;});
+  document.querySelectorAll('#con-tar-drop input').forEach(function(i){i.checked=false;});
+  conCanChanged(true);
+  conTarChanged(true);
+  renderConsulta();
+}
+function conOnCli(){
+  var cid=parseInt(document.getElementById('con-cli').value)||null;
+  var wrap=document.getElementById('con-can-wrap');
+  var drop=document.getElementById('con-can-drop');
+  if(!cid){
+    wrap.style.display='none';drop.innerHTML='';
+  } else {
+    wrap.style.display='';
+    var c=clientes.find(function(x){return x.id===cid;});
+    drop.innerHTML='';
+    if(c&&c.canchas){
+      c.canchas.forEach(function(ca){
+        var nm=canNombre(ca);
+        var lbl=document.createElement('label');lbl.className='msel-item';
+        lbl.innerHTML='<input type="checkbox" value="'+nm.replace(/"/g,'&quot;')+'" onchange="conCanChanged()"> '+nm+(canTipo(ca)==='sintetica'?' [S]':'');
+        drop.appendChild(lbl);
+      });
+    }
+    conCanChanged(true);
+  }
+  renderConsulta();
+}
+function conCanChanged(skipRender){
+  var vals=getMSelVals('con-can-drop');
+  var total=document.querySelectorAll('#con-can-drop input').length;
+  var lbl=document.getElementById('con-can-lbl');
+  if(!vals.length||vals.length===total)lbl.textContent='Todas';
+  else if(vals.length===1)lbl.textContent=vals[0];
+  else lbl.textContent=vals.length+' canchas';
+  if(skipRender!==true)renderConsulta();
+}
+function setConVista(v){
+  _conVista=v;
+  var bm=document.getElementById('cv-mes'),ba=document.getElementById('cv-anio');
+  bm.style.background=v==='mes'?'var(--blue)':'var(--bg2)';bm.style.color=v==='mes'?'#fff':'var(--tx2)';
+  ba.style.background=v==='anio'?'var(--blue)':'var(--bg2)';ba.style.color=v==='anio'?'#fff':'var(--tx2)';
+  renderConsulta();
+}
+function conNav(n){
+  if(_conVista==='anio'){_conYear+=n;}
+  else{_conMonth+=n;if(_conMonth>11){_conMonth=0;_conYear++;}if(_conMonth<0){_conMonth=11;_conYear--;}}
+  renderConsulta();
+}
+function getConsultaTasks(){
+  var cid=parseInt(document.getElementById('con-cli').value)||null;
+  var tarVals=getMSelVals('con-tar-drop');
+  var isYear=_conVista==='anio';
+  var canVals=cid?getMSelVals('con-can-drop'):[];
+  var out=tasks.filter(function(t){
+    if(t.est!=='completada')return false;
+    if(webIsEncargado&&webClientes.indexOf(t.cli)<0)return false;
+    if(cid&&t.cli!==cid)return false;
+    if(tarVals.length&&tarVals.indexOf(t.tar)<0)return false;
+    if(canVals.length&&canVals.indexOf(t.can)<0)return false;
+    if(!t.fec)return false;
+    var d=new Date(t.fec+'T12:00');
+    if(isYear){if(d.getFullYear()!==_conYear)return false;}
+    else{if(d.getMonth()!==_conMonth||d.getFullYear()!==_conYear)return false;}
+    return true;
+  });
+  out.sort(function(a,b){return (a.fec+(a.des||'')).localeCompare(b.fec+(b.des||''));});
+  return out;
+}
+function renderConsulta(){
+  var lbl=document.getElementById('con-lbl');
+  if(lbl)lbl.textContent=_conVista==='anio'?('Año '+_conYear):(MES[_conMonth]+' '+_conYear);
+  var ct=document.getElementById('consulta-ct');
+  if(!ct)return;
+  var list=getConsultaTasks();
+  if(!list.length){ct.innerHTML='<div class="empty">Sin tareas completadas con esos filtros</div>';return;}
+  var h='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">'+list.length+' tarea'+(list.length===1?'':'s')+' completada'+(list.length===1?'':'s')+'</div>';
+  list.forEach(function(t){
+    var c=clientes.find(function(x){return x.id===t.cli;});
+    var d=new Date(t.fec+'T12:00');
+    var fecStr=d.toLocaleDateString('es-UY',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+    var fns=tFuns(t).join(', ')||'—';
+    var maq=t.maq?(t.maq+(t.maq2?' + '+t.maq2:'')):'';
+    var hs=(t.maq&&t.hsIni!==null&&t.hsIni!==undefined&&t.hsFin!==null&&t.hsFin!==undefined)?(t.hsIni+' → '+t.hsFin+'hs'):'';
+    h+='<div style="border:0.5px solid var(--bo);border-left:3px solid '+(c?c.bg:'#ccc')+';border-radius:var(--br);padding:11px 13px;margin-bottom:9px;background:var(--bg)">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">';
+    h+='<div><strong style="font-size:14px">'+t.tar+'</strong> <span style="font-size:12px;color:var(--tx2)">· '+(c?c.nombre:'')+' · '+t.can+'</span></div>';
+    h+='<div style="font-size:12px;color:var(--tx2)">'+fecStr+' · '+t.des+(t.has?'–'+t.has:'')+'</div>';
+    h+='</div>';
+    if(t.spc)h+='<div style="margin-top:7px;padding:8px 10px;background:var(--bg2);border-radius:6px;font-size:13px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--tx3);display:block;margin-bottom:2px">Especificación</span>'+t.spc+'</div>';
+    var meta=[];
+    meta.push('👤 '+fns);
+    if(t.compPor)meta.push('✅ Completó: <strong style="color:var(--green)">'+t.compPor+'</strong>');
+    if(maq)meta.push('⚙️ '+maq+(hs?' ('+hs+')':''));
+    h+='<div style="margin-top:7px;font-size:12px;color:var(--tx2);display:flex;flex-wrap:wrap;gap:10px;align-items:center">'+meta.join('<span style="color:var(--bo2)">·</span>')+'</div>';
+    if(t.tar==='Mant. Maquinaria'&&t.chk&&Object.keys(t.chk).length){
+      h+='<div style="margin-top:6px;font-size:12px;color:var(--tx2)">'+Object.keys(t.chk).map(function(k){return (t.chk[k]?'✅':'⬜')+' '+k;}).join(' &nbsp; ')+'</div>';
+    }
+    if(t.obs)h+='<div style="margin-top:6px;font-size:12px;color:var(--tx2)"><em>Obs:</em> '+t.obs+'</div>';
+    h+='</div>';
+  });
+  ct.innerHTML=h;
+}
+function exportConsulta(){
+  var list=getConsultaTasks();
+  if(!list.length){alert('No hay tareas para exportar con esos filtros');return;}
+  var periodo=_conVista==='anio'?('Anio_'+_conYear):(MES[_conMonth]+'_'+_conYear);
+  var header=['Fecha','Cliente','Cancha','Tarea','Especificacion','Funcionarios','Completada por','Maquina','Accesorio','Hs inicio','Hs fin','Desde','Hasta','Observaciones'];
+  var rows=[header];
+  list.forEach(function(t){
+    var c=clientes.find(function(x){return x.id===t.cli;});
+    rows.push([t.fec,c?c.nombre:'',t.can||'',t.tar||'',t.spc||'',tFuns(t).join(', '),t.compPor||'',t.maq||'',t.maq2||'',
+      (t.hsIni!==null&&t.hsIni!==undefined?t.hsIni:''),(t.hsFin!==null&&t.hsFin!==undefined?t.hsFin:''),
+      t.des||'',t.has||'',t.obs||'']);
+  });
+  if(window.XLSX){
+    var ws=XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols']=[{wch:12},{wch:16},{wch:14},{wch:16},{wch:34},{wch:20},{wch:16},{wch:16},{wch:14},{wch:9},{wch:9},{wch:7},{wch:7},{wch:30}];
+    var wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'Consulta');
+    XLSX.writeFile(wb,'Consulta_'+periodo+'.xlsx');
+  } else {
+    var csv=rows.map(function(r){return r.map(function(v){return '"'+(v==null?'':v).toString().replace(/"/g,'""')+'"';}).join(',');}).join('\r\n');
+    var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='Consulta_'+periodo+'.csv';a.click();
+  }
+}
+
 function renderResumen(){
   var isYear=_resumenView==='anio';
   document.getElementById('mlbl-r').textContent=isYear?('Año '+cYearR):(MES[cMonthR]+' '+cYearR);
@@ -2617,7 +2812,7 @@ function SVT(){
   }
   if(editingId){
     var t=tasks.find(function(x){return x.id===editingId;});
-    if(t){Object.assign(t,base,{fec:fec,_dirty:true});saveTaskToSupabase(t);}
+    if(t){if(t.recId&&t.fec&&t.fec!==fec)skipRecFecha(t.recId,t.fec);Object.assign(t,base,{fec:fec,_dirty:true});saveTaskToSupabase(t);}
     editingId=null;CM3('mnew');saveState();render();return;
   }
   if(isRec){
@@ -2793,6 +2988,7 @@ function MDone(){
   var t=tasks.find(function(x){return x.id===selId;});
   if(t){
     t.est='completada';
+    t.compPor=webUser||'Admin';
     t.obs=document.getElementById('dobs').value;
     if(t.maq){
       var m=maquinas.find(function(x){return x.nombre===t.maq;});
@@ -2821,6 +3017,13 @@ function MDone(){
   try{saveState();}catch(e){}
   render();
   if(cTab==='reg')renderReg();
+}
+function skipRecFecha(recId,fecha){
+  if(!recId||!fecha)return;
+  var r=recs.find(function(x){return x.id===recId;});
+  if(!r)return;
+  r.skip=r.skip||[];
+  if(r.skip.indexOf(fecha)<0){r.skip.push(fecha);saveRecToSupabase(r);}
 }
 function saveRecToSupabase(r){
   if(!r)return;

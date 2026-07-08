@@ -1016,10 +1016,20 @@ function iniciar(id){
   queueTaskSync(t,'en_curso');
 }
 
+function skipRecFecha(recId,fecha){
+  if(!recId||!fecha)return;
+  var r=recs.find(function(x){return x.id===recId;});
+  if(!r)return;
+  r.skip=r.skip||[];
+  if(r.skip.indexOf(fecha)<0){r.skip.push(fecha);saveRecCampo(r);}
+}
 function cambiarFecha(id, newFec){
   var t=tasks.find(function(x){return x.id===id;});if(!t)return;
   var obsEl=document.getElementById('obs-'+id);
   if(obsEl)t.obs=obsEl.value;
+  // Si es una tarea recurrente y se mueve de fecha, marcar la fecha original en el
+  // skip[] de la recurrente para que GRT no la regenere (causaba duplicados sin funcionario).
+  if(t.recId&&t.fec&&t.fec!==newFec)skipRecFecha(t.recId,t.fec);
   t.fec=newFec;
   openCards[id]=true;
   showSaveStatus('✓ Fecha guardada',true);
@@ -1636,16 +1646,28 @@ function ntRenderAsignar(wrapId,cli){
 }
 
 function openNuevaTarea(){
+  // Encargado con un solo cliente → ese cliente queda fijado por default
+  var soloUnCli=(isEncargado&&encargadoClientes.length===1)?encargadoClientes[0]:null;
   // Clientes (admin: all; encargado: only theirs)
   var cliList=isAdmin?clientes:clientes.filter(function(c){return encargadoClientes.indexOf(c.id)>=0;});
   var cliSel=document.getElementById('nt-cli');
-  cliSel.innerHTML='<option value="">Seleccionar...</option>';
-  cliList.forEach(function(c){var o=document.createElement('option');o.value=c.id;o.textContent=c.nombre;cliSel.appendChild(o);});
-  document.getElementById('nt-can').innerHTML='<option value="">Seleccioná un cliente</option>';
-  document.getElementById('nt-tar').innerHTML='<option value="">Seleccioná una cancha</option>';
-  document.getElementById('nt-asig').innerHTML='<span style="font-size:12px;color:var(--tx3)">Seleccioná un cliente</span>';
-  // Máquinas (admin: all; encargado: general + own clients')
-  var maqList=isAdmin?maquinas:maquinas.filter(function(m){return m.scope!=='cliente'||(m.cliId&&encargadoClientes.indexOf(m.cliId)>=0);});
+  cliSel.innerHTML=soloUnCli?'':'<option value="">Seleccionar...</option>';
+  cliList.forEach(function(c){var o=document.createElement('option');o.value=c.id;o.textContent=c.nombre;if(soloUnCli&&c.id===soloUnCli)o.selected=true;cliSel.appendChild(o);});
+  if(soloUnCli){
+    ntOnCli(); // cascada: canchas + asignar del único cliente
+  } else {
+    document.getElementById('nt-can').innerHTML='<option value="">Seleccioná un cliente</option>';
+    document.getElementById('nt-tar').innerHTML='<option value="">Seleccioná una cancha</option>';
+    document.getElementById('nt-asig').innerHTML='<span style="font-size:12px;color:var(--tx3)">Seleccioná un cliente</span>';
+    document.getElementById('nt-maq-c').innerHTML='<option value="">Sin máquina</option>';
+    document.getElementById('nt-maq2c-row').style.display='none';
+  }
+  // Máquinas: admin=todas; encargado con 1 cliente=solo las de ese cliente (sin generales);
+  //           encargado con 2+ clientes=generales + las de sus clientes
+  var maqList;
+  if(isAdmin){maqList=maquinas;}
+  else if(soloUnCli){maqList=maquinas.filter(function(m){return m.scope==='cliente'&&m.cliId===soloUnCli;});}
+  else {maqList=maquinas;} // encargado con 2+ clientes → todas las máquinas
   var maqSel=document.getElementById('nt-maq');
   maqSel.innerHTML='<option value="">Seleccionar...</option>';
   maqList.forEach(function(m){var o=document.createElement('option');o.value=m.nombre;o.textContent=m.nombre+(m.scope==='cliente'&&m.cliId?' ('+cN(m.cliId)+')':'');maqSel.appendChild(o);});
@@ -1685,6 +1707,7 @@ function ntOnCli(){
   if(c&&c.canchas){c.canchas.forEach(function(ca){var nm=ntCanNombre(ca);var tipo=ntCanTipo(ca);var o=document.createElement('option');o.value=nm;o.dataset.tipo=tipo;o.textContent=nm+(tipo==='sintetica'?' [S]':'');canSel.appendChild(o);});}
   document.getElementById('nt-tar').innerHTML='<option value="">Seleccioná una cancha</option>';
   ntRenderAsignar('nt-asig',cid);
+  ntFillMaqCancha();
 }
 function ntOnCan(){
   var canSel=document.getElementById('nt-can');
@@ -1694,6 +1717,62 @@ function ntOnCan(){
   var tarSel=document.getElementById('nt-tar');
   tarSel.innerHTML='<option value="">Seleccionar...</option>';
   lista.forEach(function(t){var o=document.createElement('option');o.value=t;o.textContent=t;tarSel.appendChild(o);});
+  ntFillMaqCancha();
+}
+// Visibilidad de máquina para tareas de cancha según rol:
+//  - encargado de 1 cliente → solo máquinas asignadas a ese cliente (sin generales)
+//  - encargado de 2+ clientes → todas las máquinas
+//  - admin → generales + máquinas del cliente seleccionado (paridad con la web)
+function ntMaqRoleOkCancha(m,cid){
+  var soloUnCli=(isEncargado&&encargadoClientes.length===1)?encargadoClientes[0]:null;
+  if(soloUnCli)return(m.scope==='cliente'&&m.cliId===soloUnCli);
+  if(isEncargado)return true;
+  return(m.scope==='general'||(m.scope==='cliente'&&m.cliId===cid));
+}
+// Máquina para tareas de CANCHA (excluye accesorios, filtradas por rol y por compatibilidad de tarea)
+function ntFillMaqCancha(){
+  var cid=parseInt(document.getElementById('nt-cli').value)||0;
+  var tar=document.getElementById('nt-tar').value;
+  var sel=document.getElementById('nt-maq-c');
+  if(!sel)return;
+  var prev=sel.value;
+  sel.innerHTML='<option value="">Sin máquina</option>';
+  maquinas.filter(function(m){
+    return m.cat!=='accesorio'
+      &&ntMaqRoleOkCancha(m,cid)
+      &&(!tar||!m.tareas||!m.tareas.length||m.tareas.indexOf(tar)>=0);
+  }).forEach(function(m){
+    var o=document.createElement('option');
+    var catTag=m.cat==='vehiculo'?' 🚜':'';
+    o.value=m.nombre;o.textContent=m.nombre+catTag+' ('+(+m.hs||0).toFixed(1)+'hs)';
+    sel.appendChild(o);
+  });
+  if(prev){var f=sel.querySelector('option[value="'+prev.replace(/"/g,'&quot;')+'"]');if(f)sel.value=prev;}
+  ntOnMaqCancha();
+}
+// Segundo selector (accesorio/acoplado) — solo si la máquina principal es un vehículo
+function ntOnMaqCancha(){
+  var cid=parseInt(document.getElementById('nt-cli').value)||0;
+  var tar=document.getElementById('nt-tar').value;
+  var mainMaq=document.getElementById('nt-maq-c').value;
+  var row=document.getElementById('nt-maq2c-row');
+  var sel=document.getElementById('nt-maq2c');
+  var mainObj=maquinas.find(function(m){return m.nombre===mainMaq;});
+  var isVeh=mainObj&&mainObj.cat==='vehiculo';
+  if(row)row.style.display=isVeh?'':'none';
+  if(!isVeh){if(sel)sel.value='';return;}
+  var prev=sel.value;
+  sel.innerHTML='<option value="">Sin accesorio</option>';
+  maquinas.filter(function(m){
+    return m.cat==='accesorio'
+      &&ntMaqRoleOkCancha(m,cid)
+      &&(!tar||!m.tareas||!m.tareas.length||m.tareas.indexOf(tar)>=0);
+  }).forEach(function(m){
+    var o=document.createElement('option');
+    o.value=m.nombre;o.textContent=m.nombre+(m.marca?' ('+m.marca+')':'');
+    sel.appendChild(o);
+  });
+  if(prev){var f=sel.querySelector('option[value="'+prev.replace(/"/g,'&quot;')+'"]');if(f)sel.value=prev;}
 }
 function ntOnMaq(){
   var maqNom=document.getElementById('nt-maq').value;
@@ -1735,7 +1814,10 @@ async function saveNuevaTarea(){
     if(!tar)return ntWarn('Seleccioná el tipo de tarea');
     if(!fec)return ntWarn('Seleccioná una fecha');
     var funs=[...document.querySelectorAll('#nt-asig input:checked')].map(function(i){return i.value;});
-    base={cli:cid,can:can,tar:tar,funs:funs,maq:'',maq2:'',des:document.getElementById('nt-des').value,has:document.getElementById('nt-has').value,spc:document.getElementById('nt-spc').value||'',chk:{}};
+    var maqC=document.getElementById('nt-maq-c').value||'';
+    var maq2C='';var m2row=document.getElementById('nt-maq2c-row');
+    if(m2row&&m2row.style.display!=='none')maq2C=document.getElementById('nt-maq2c').value||'';
+    base={cli:cid,can:can,tar:tar,funs:funs,maq:maqC,maq2:maq2C,des:document.getElementById('nt-des').value,has:document.getElementById('nt-has').value,spc:document.getElementById('nt-spc').value||'',chk:{}};
   } else {
     var maqNom=document.getElementById('nt-maq').value;
     if(!maqNom)return ntWarn('Seleccioná una máquina');
@@ -1941,12 +2023,14 @@ initLogin();
     <div id="nt-form-cancha">
       <div class="nt-row"><label class="nt-lbl">Cliente</label><select id="nt-cli" class="nt-sel" onchange="ntOnCli()"><option value="">Seleccionar...</option></select></div>
       <div class="nt-row"><label class="nt-lbl">Cancha</label><select id="nt-can" class="nt-sel" onchange="ntOnCan()"><option value="">Seleccioná un cliente</option></select></div>
-      <div class="nt-row"><label class="nt-lbl">Tipo de tarea</label><select id="nt-tar" class="nt-sel"><option value="">Seleccioná una cancha</option></select></div>
+      <div class="nt-row"><label class="nt-lbl">Tipo de tarea</label><select id="nt-tar" class="nt-sel" onchange="ntFillMaqCancha()"><option value="">Seleccioná una cancha</option></select></div>
       <div class="nt-row" style="display:flex;gap:10px">
         <div style="flex:1.4"><label class="nt-lbl">Fecha</label><input type="date" id="nt-fec" class="nt-inp"></div>
         <div style="flex:1"><label class="nt-lbl">Desde</label><input type="time" id="nt-des" class="nt-inp"></div>
         <div style="flex:1"><label class="nt-lbl">Hasta</label><input type="time" id="nt-has" class="nt-inp"></div>
       </div>
+      <div class="nt-row"><label class="nt-lbl">Máquina (opcional)</label><select id="nt-maq-c" class="nt-sel" onchange="ntOnMaqCancha()"><option value="">Sin máquina</option></select></div>
+      <div class="nt-row" id="nt-maq2c-row" style="display:none"><label class="nt-lbl">Accesorio / Acoplado</label><select id="nt-maq2c" class="nt-sel"><option value="">Sin accesorio</option></select></div>
       <div class="nt-row"><label class="nt-lbl">Asignar a (opcional)</label><div id="nt-asig" style="display:flex;flex-wrap:wrap;gap:6px"><span style="font-size:12px;color:var(--tx3)">Seleccioná un cliente</span></div></div>
       <div class="nt-row"><label class="nt-lbl">Especificaciones (opcional)</label><textarea id="nt-spc" rows="2" class="nt-inp" style="resize:none" placeholder="Detalles, dosis, notas..."></textarea></div>
     </div>
