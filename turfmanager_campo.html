@@ -255,6 +255,8 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg3);min-he
 <script>
 // ── DATA ──────────────────────────────────────────────────────
 var clientes=[], funcionarios=[], tasks=[], recs=[], checklists={}, maquinas=[], novs=[], acts=[];
+var tiposTarea=['Corte','Fertilización','Pulverización','Aireación sólida','Aireación hueca','Slicer','Verti-Drain','Verticorte','Arenado','Rolado','Riego','Siembra','Colocación de panes','Taqueo','Marcado de líneas','Otros'];
+var tiposTareaSint=['Riego','Cepillado','Rastra','Rolado','Limpieza drenajes','Limpieza de residuos','Retiro vegetacion laterales','Bordeado laterales','Revision equipamiento deportivo','Inspeccion de juntas','Medicion de relleno','Top-dressing localizado','Top-dressing total','Top-dressing (arena/relleno)','Arreglo sistema de riego','Reparacion de uniones','Descompactacion','Reparaciones no especificadas','Otros'];
 var nxNov=1;
 const SB_URL='https://kkuhghsmoxlcuhhpzkll.supabase.co';
 const SB_KEY='sb_publishable_DW9Wvf4kOHMOBo-aA-W3tw_jjafLqPA';
@@ -375,8 +377,12 @@ async function loadData(){
     acts=actRows.map(function(a){return{id:a.id,cli:a.cli||null,fec:a.fec,can:a.can,des:a.des,has:a.has,tipo:a.tipo,detalle:a.detalle};});
     await loadLibroCampo();
     if(!isAdmin)setTimeout(function(){initFunFilterBar();},100);
-    recs=recRows.map(function(r){return{id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias||[],hasta:r.hasta,skip:r.skip||[]};});
-    cfgRows.forEach(function(c){if(c.clave==='checklists')checklists=c.valor;});
+    recs=recRows.map(function(r){return{id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias||[],hasta:r.hasta,skip:r.skip||[],chk:r.chk||{}};});
+    cfgRows.forEach(function(c){
+      if(c.clave==='checklists')checklists=c.valor;
+      if(c.clave==='tipos_tarea'&&Array.isArray(c.valor)&&c.valor.length)tiposTarea=c.valor;
+      if(c.clave==='tipos_tarea_sint'&&Array.isArray(c.valor)&&c.valor.length)tiposTareaSint=c.valor;
+    });
     if(tasks.length)nxNov=Math.max.apply(null,tasks.map(function(x){return x.id;}))+1;
     sbOnline=true;
     return true;
@@ -453,6 +459,8 @@ function enterApp(nombre){
   if(rb)rb.style.display=isAdmin?'':'none';
   var lb2=document.getElementById('btn-libro');
   if(lb2)lb2.style.display=isAdmin?'':'none';
+  var fab=document.getElementById('fab-nueva');
+  if(fab)fab.style.display=(isAdmin||isEncargado)?'flex':'none';
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app-screen').style.display='flex';
   cMon=monday(new Date());
@@ -1525,6 +1533,253 @@ function saveNewTask(){
   if(cView==='dia'){cDay=date;cMon=monday(new Date(date+'T12:00'));}
   render();
 }
+// ══ NUEVA TAREA (encargado / admin desde campo) ═══════════════
+var _ntTipo='cancha';
+function ntCanNombre(ca){return typeof ca==='object'&&ca!==null?ca.nombre:ca;}
+function ntCanTipo(ca){return typeof ca==='object'&&ca!==null?(ca.tipo||'natural'):'natural';}
+
+function nextTaskIdCampo(){
+  // Field app loads ALL tasks, so max+1 is globally unique. Campo-created tasks
+  // live in a high range (>=2M) to avoid colliding with web sequential ids and to
+  // minimize cross-device collision on simultaneous creation.
+  var maxLocal=tasks.length?Math.max.apply(null,tasks.map(function(x){return x.id;})):0;
+  if(nxNov<=maxLocal)nxNov=maxLocal+1;
+  if(nxNov<2000000)nxNov=2000000+Math.floor(Math.random()*1000000);
+  return nxNov++;
+}
+function nextRecIdCampo(){
+  var maxLocal=recs.length?Math.max.apply(null,recs.map(function(x){return x.id;})):0;
+  var n=maxLocal+1;
+  if(n<2000000)n=2000000+Math.floor(Math.random()*1000000);
+  return n;
+}
+
+// Snake_case mappers mirroring the web app (source of truth)
+function saveTaskCampo(t){
+  var row={id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',
+    fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',
+    rec_id:t.recId||null,chk:t.chk||{},hs_ini:t.hsIni||null,hs_fin:t.hsFin||null,comp_por:t.compPor||null};
+  return sbUpsert('tareas',[row]);
+}
+function saveRecCampo(r){
+  var row={id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,
+    spc:r.spc||'',dias:r.dias,hasta:r.hasta,skip:r.skip||[],chk:r.chk||{}};
+  return sbUpsert('recurrentes',[row]);
+}
+
+// Ported from web GRT (generation only) — respects skips, cancelled/done, and dedups
+// within the run. Uses the field app's local-date helpers (fD/aD/monday) to avoid TZ bugs.
+function GRTcampo(){
+  var tod=new Date();tod.setHours(0,0,0,0);
+  var newTasks=[];
+  var existingKeys={};var cancelledKeys={};
+  tasks.forEach(function(t){
+    var key=t.cli+'|'+t.can+'|'+t.tar+'|'+t.fec+'|'+t.des;
+    existingKeys[key]=true;
+    var keyNoDies=t.cli+'|'+t.can+'|'+t.tar+'|'+t.fec;
+    if(t.est==='cancelada'||t.est==='completada'||t.est==='en_curso')cancelledKeys[keyNoDies]=true;
+  });
+  recs.forEach(function(r){
+    var hastaDate=new Date(r.hasta+'T23:59:00');var weekStart=monday(tod);var sc=0;
+    var diasUniq=[...new Set(r.dias)];
+    var skipSet={};(r.skip||[]).forEach(function(s){skipSet[s]=true;});
+    while(weekStart<=hastaDate&&sc<60){sc++;
+      diasUniq.forEach(function(dn){
+        var d=aD(weekStart,dn===0?6:dn-1);
+        if(d<tod||d>hastaDate)return;
+        var ds=fD(d);
+        if(skipSet[ds])return;
+        var keyNoDies=r.cli+'|'+r.can+'|'+r.tar+'|'+ds;
+        if(cancelledKeys[keyNoDies])return;
+        var key=r.cli+'|'+r.can+'|'+r.tar+'|'+ds+'|'+r.des;
+        if(existingKeys[key])return;
+        existingKeys[key]=true;
+        var chkTemplate={};
+        if(r.chk&&typeof r.chk==='object'){Object.keys(r.chk).forEach(function(k){chkTemplate[k]=false;});}
+        var newTask={id:nextTaskIdCampo(),cli:r.cli,can:r.can,tar:r.tar,
+          funs:(r.funs&&r.funs.length?r.funs:[]),
+          maq:r.maq||'',maq2:r.maq2||'',fec:ds,des:r.des,has:r.has,spc:r.spc||'',
+          est:'pendiente',obs:'',recId:r.id,chk:chkTemplate,hsIni:null,hsFin:null,compPor:null};
+        tasks.push(newTask);newTasks.push(newTask);
+      });
+      weekStart=aD(weekStart,7);
+    }
+  });
+  if(newTasks.length){
+    var rows=newTasks.map(function(t){return{id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],
+      maq:t.maq||'',maq2:t.maq2||'',fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est||'pendiente',
+      obs:t.obs||'',rec_id:t.recId||null,chk:t.chk||{},hs_ini:null,hs_fin:null,comp_por:null};});
+    return sbUpsert('tareas',rows).catch(function(e){console.warn('GRTcampo save error',e);});
+  }
+  return Promise.resolve();
+}
+
+// Operative funcionarios for the assign chips (excludes encargados, matching the card UI)
+function ntOps(cli){
+  return funcionarios.filter(function(f){
+    if(f.encargado)return false;
+    if(cli)return f.clientes&&f.clientes.indexOf(cli)>=0;
+    return !f.exclusivo;
+  });
+}
+function ntRenderAsignar(wrapId,cli){
+  var wrap=document.getElementById(wrapId);if(!wrap)return;
+  var ops=ntOps(cli);
+  if(!ops.length){wrap.innerHTML='<span style="font-size:12px;color:var(--tx3)">Sin funcionarios operativos'+(cli?' para este cliente':'')+' — se crea sin asignar</span>';return;}
+  wrap.innerHTML='';
+  ops.forEach(function(f){
+    var lbl=document.createElement('label');
+    lbl.style.cssText='display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:6px 12px;border:1px solid var(--bo2);border-radius:20px;background:var(--bg);cursor:pointer';
+    lbl.innerHTML='<input type="checkbox" value="'+f.nombre.replace(/"/g,'&quot;')+'" style="accent-color:var(--blue)"> '+f.nombre;
+    wrap.appendChild(lbl);
+  });
+}
+
+function openNuevaTarea(){
+  // Clientes (admin: all; encargado: only theirs)
+  var cliList=isAdmin?clientes:clientes.filter(function(c){return encargadoClientes.indexOf(c.id)>=0;});
+  var cliSel=document.getElementById('nt-cli');
+  cliSel.innerHTML='<option value="">Seleccionar...</option>';
+  cliList.forEach(function(c){var o=document.createElement('option');o.value=c.id;o.textContent=c.nombre;cliSel.appendChild(o);});
+  document.getElementById('nt-can').innerHTML='<option value="">Seleccioná un cliente</option>';
+  document.getElementById('nt-tar').innerHTML='<option value="">Seleccioná una cancha</option>';
+  document.getElementById('nt-asig').innerHTML='<span style="font-size:12px;color:var(--tx3)">Seleccioná un cliente</span>';
+  // Máquinas (admin: all; encargado: general + own clients')
+  var maqList=isAdmin?maquinas:maquinas.filter(function(m){return m.scope!=='cliente'||(m.cliId&&encargadoClientes.indexOf(m.cliId)>=0);});
+  var maqSel=document.getElementById('nt-maq');
+  maqSel.innerHTML='<option value="">Seleccionar...</option>';
+  maqList.forEach(function(m){var o=document.createElement('option');o.value=m.nombre;o.textContent=m.nombre+(m.scope==='cliente'&&m.cliId?' ('+cN(m.cliId)+')':'');maqSel.appendChild(o);});
+  document.getElementById('nt-svc-wrap').style.display='none';
+  document.getElementById('nt-asig2').innerHTML='<span style="font-size:12px;color:var(--tx3)">Seleccioná una máquina</span>';
+  var today=fD(new Date());
+  document.getElementById('nt-fec').value=today;
+  document.getElementById('nt-fec2').value=today;
+  document.getElementById('nt-des').value='08:00';
+  document.getElementById('nt-has').value='10:00';
+  document.getElementById('nt-des2').value='08:00';
+  document.getElementById('nt-has2').value='10:00';
+  document.getElementById('nt-spc').value='';
+  document.getElementById('nt-obs').value='';
+  // Recurrente (admin only)
+  document.getElementById('nt-rec-wrap').style.display=isAdmin?'':'none';
+  document.getElementById('nt-rec-chk').checked=false;
+  document.getElementById('nt-rec-fields').style.display='none';
+  document.querySelectorAll('#nt-dias .ntd').forEach(function(b){b.classList.remove('sel');});
+  document.getElementById('nt-hasta').value=new Date().getFullYear()+'-12-31';
+  document.getElementById('nt-warn').style.display='none';
+  ntSetTipo('cancha');
+  document.getElementById('mnt-modal').style.display='flex';
+}
+function ntSetTipo(t){
+  _ntTipo=t;
+  document.getElementById('nt-form-cancha').style.display=t==='cancha'?'':'none';
+  document.getElementById('nt-form-maq').style.display=t==='maq'?'':'none';
+  var tc=document.getElementById('nt-tab-cancha');var tm=document.getElementById('nt-tab-maq');
+  tc.classList.toggle('on',t==='cancha');tm.classList.toggle('on',t==='maq');
+}
+function ntOnCli(){
+  var cid=parseInt(document.getElementById('nt-cli').value)||null;
+  var canSel=document.getElementById('nt-can');
+  canSel.innerHTML='<option value="">Seleccionar...</option>';
+  var c=clientes.find(function(x){return x.id===cid;});
+  if(c&&c.canchas){c.canchas.forEach(function(ca){var nm=ntCanNombre(ca);var tipo=ntCanTipo(ca);var o=document.createElement('option');o.value=nm;o.dataset.tipo=tipo;o.textContent=nm+(tipo==='sintetica'?' [S]':'');canSel.appendChild(o);});}
+  document.getElementById('nt-tar').innerHTML='<option value="">Seleccioná una cancha</option>';
+  ntRenderAsignar('nt-asig',cid);
+}
+function ntOnCan(){
+  var canSel=document.getElementById('nt-can');
+  var opt=canSel.options[canSel.selectedIndex];
+  var tipo=opt?opt.dataset.tipo:'';
+  var lista=tipo==='sintetica'?tiposTareaSint:tiposTarea;
+  var tarSel=document.getElementById('nt-tar');
+  tarSel.innerHTML='<option value="">Seleccionar...</option>';
+  lista.forEach(function(t){var o=document.createElement('option');o.value=t;o.textContent=t;tarSel.appendChild(o);});
+}
+function ntOnMaq(){
+  var maqNom=document.getElementById('nt-maq').value;
+  var m=maquinas.find(function(x){return x.nombre===maqNom;});
+  var wrap=document.getElementById('nt-svc-wrap');
+  var checksEl=document.getElementById('nt-svc');
+  if(!m){wrap.style.display='none';document.getElementById('nt-asig2').innerHTML='<span style="font-size:12px;color:var(--tx3)">Seleccioná una máquina</span>';return;}
+  var lista=(m.svcTareas&&m.svcTareas.length)?m.svcTareas:[];
+  if(lista.length){
+    wrap.style.display='';checksEl.innerHTML='';
+    lista.forEach(function(item){
+      var nm=(typeof item==='object'&&item!==null)?item.nombre:item;
+      var row=document.createElement('label');
+      row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 0;cursor:pointer;border-bottom:0.5px solid var(--bo)';
+      row.innerHTML='<input type="checkbox" value="'+String(nm).replace(/"/g,'&quot;')+'" checked style="accent-color:var(--blue);width:16px;height:16px"> <span style="font-size:13px">'+nm+'</span>';
+      checksEl.appendChild(row);
+    });
+  } else { wrap.style.display='none'; }
+  var maqCli=(m.scope==='cliente'&&m.cliId)?m.cliId:null;
+  ntRenderAsignar('nt-asig2',maqCli);
+}
+function ntToggleRec(){
+  document.getElementById('nt-rec-fields').style.display=document.getElementById('nt-rec-chk').checked?'':'none';
+}
+function ntWarn(msg){var w=document.getElementById('nt-warn');w.textContent=msg;w.style.display='';return false;}
+function ntRestoreBtn(){var b=document.getElementById('nt-save-btn');if(b){b.disabled=false;b.textContent='Crear tarea';}}
+
+async function saveNuevaTarea(){
+  document.getElementById('nt-warn').style.display='none';
+  var isRec=isAdmin&&document.getElementById('nt-rec-chk').checked;
+  var base,fec;
+  if(_ntTipo==='cancha'){
+    var cid=parseInt(document.getElementById('nt-cli').value)||null;
+    var can=document.getElementById('nt-can').value;
+    var tar=document.getElementById('nt-tar').value;
+    fec=document.getElementById('nt-fec').value;
+    if(!cid)return ntWarn('Seleccioná un cliente');
+    if(!can)return ntWarn('Seleccioná una cancha');
+    if(!tar)return ntWarn('Seleccioná el tipo de tarea');
+    if(!fec)return ntWarn('Seleccioná una fecha');
+    var funs=[...document.querySelectorAll('#nt-asig input:checked')].map(function(i){return i.value;});
+    base={cli:cid,can:can,tar:tar,funs:funs,maq:'',maq2:'',des:document.getElementById('nt-des').value,has:document.getElementById('nt-has').value,spc:document.getElementById('nt-spc').value||'',chk:{}};
+  } else {
+    var maqNom=document.getElementById('nt-maq').value;
+    if(!maqNom)return ntWarn('Seleccioná una máquina');
+    fec=document.getElementById('nt-fec2').value;
+    if(!fec)return ntWarn('Seleccioná una fecha');
+    var m=maquinas.find(function(x){return x.nombre===maqNom;});
+    var maqCli=(m&&m.scope==='cliente'&&m.cliId)?m.cliId:null;
+    var funs2=[...document.querySelectorAll('#nt-asig2 input:checked')].map(function(i){return i.value;});
+    var chk={};[...document.querySelectorAll('#nt-svc input:checked')].forEach(function(i){chk[i.value]=false;});
+    base={cli:maqCli,can:'',tar:'Mant. Maquinaria',funs:funs2,maq:maqNom,maq2:'',des:document.getElementById('nt-des2').value,has:document.getElementById('nt-has2').value,spc:document.getElementById('nt-obs').value||'',chk:chk};
+  }
+  var btn=document.getElementById('nt-save-btn');
+  if(btn){btn.disabled=true;btn.textContent='Guardando...';}
+  try{
+    if(isRec){
+      var dias=[...document.querySelectorAll('#nt-dias .ntd.sel')].map(function(b){return parseInt(b.dataset.d);});
+      if(!dias.length){ntRestoreBtn();return ntWarn('Seleccioná al menos un día');}
+      var hasta=document.getElementById('nt-hasta').value||(new Date().getFullYear()+'-12-31');
+      var maxDate=fD(aD(new Date(),365));if(hasta>maxDate)hasta=maxDate;
+      var dup=recs.some(function(r){return r.cli===base.cli&&r.can===base.can&&r.tar===base.tar&&r.des===base.des&&r.has===base.has&&(r.dias.slice().sort().join(',')===dias.slice().sort().join(','));});
+      if(dup){ntRestoreBtn();return ntWarn('Ya existe una recurrente idéntica');}
+      var newRec={id:nextRecIdCampo(),dias:dias,hasta:hasta,cli:base.cli,can:base.can,tar:base.tar,funs:base.funs,maq:base.maq,des:base.des,has:base.has,spc:base.spc,skip:[],chk:base.chk||{}};
+      recs.push(newRec);
+      await saveRecCampo(newRec);
+      await GRTcampo();
+      CM3campo('mnt-modal');
+      render();
+    } else {
+      var t={id:nextTaskIdCampo(),cli:base.cli,can:base.can,tar:base.tar,funs:base.funs,maq:base.maq,maq2:base.maq2||'',
+        fec:fec,des:base.des,has:base.has,spc:base.spc||'',est:'pendiente',
+        obs:base.tar==='Mant. Maquinaria'?(base.spc||''):'',recId:null,chk:base.chk||{},hsIni:null,hsFin:null,compPor:null};
+      tasks.push(t);
+      await saveTaskCampo(t);
+      CM3campo('mnt-modal');
+      selectDay(fec);setView('dia');
+    }
+  }catch(e){
+    console.warn('saveNuevaTarea error',e);
+    ntWarn('Error guardando: '+(e&&e.message?e.message:e));
+  }
+  ntRestoreBtn();
+}
+
+
 function CM3campo(id){document.getElementById(id).style.display='none';}
 var _newTaskDate='',_newTaskHour=-1;
 // ── MULTI-SELECT FILTERS ────────────────────────────────────
@@ -1658,6 +1913,82 @@ initLogin();
 </div>
 
 <!-- MODAL COMENTARIO CANCHA -->
+<style>
+.nt-tab{flex:1;padding:10px;border-radius:var(--br);border:1px solid var(--bo2);background:var(--bg2);color:var(--tx2);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}
+.nt-tab.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+.nt-lbl{font-size:12px;color:var(--tx2);font-weight:600;display:block;margin-bottom:5px}
+.nt-inp,.nt-sel{width:100%;padding:9px 11px;font-size:14px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg2);color:var(--tx);font-family:inherit;box-sizing:border-box}
+.nt-row{margin-bottom:13px}
+.ntd{width:38px;height:38px;border-radius:50%;border:1px solid var(--bo2);background:var(--bg);color:var(--tx2);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+.ntd.sel{background:var(--blue);color:#fff;border-color:var(--blue)}
+</style>
+
+<!-- FAB nueva tarea (admin/encargado) -->
+<button id="fab-nueva" onclick="openNuevaTarea()" title="Nueva tarea" style="display:none;position:fixed;right:18px;bottom:22px;width:58px;height:58px;border-radius:50%;background:var(--blue);color:#fff;border:none;font-size:30px;line-height:1;box-shadow:0 4px 14px rgba(0,0,0,.28);cursor:pointer;z-index:150;align-items:center;justify-content:center">+</button>
+
+<!-- Modal nueva tarea -->
+<div id="mnt-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:flex-end;justify-content:center">
+  <div style="background:var(--bg);border-radius:16px 16px 0 0;padding:18px 18px 26px;width:100%;max-width:520px;max-height:92vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-size:16px;font-weight:700">Nueva tarea</div>
+      <button onclick="CM3campo('mnt-modal')" style="background:none;border:none;font-size:24px;color:var(--tx3);cursor:pointer;line-height:1">×</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button id="nt-tab-cancha" class="nt-tab on" onclick="ntSetTipo('cancha')">🌿 Cancha</button>
+      <button id="nt-tab-maq" class="nt-tab" onclick="ntSetTipo('maq')">⚙️ Maquinaria</button>
+    </div>
+    <!-- CANCHA -->
+    <div id="nt-form-cancha">
+      <div class="nt-row"><label class="nt-lbl">Cliente</label><select id="nt-cli" class="nt-sel" onchange="ntOnCli()"><option value="">Seleccionar...</option></select></div>
+      <div class="nt-row"><label class="nt-lbl">Cancha</label><select id="nt-can" class="nt-sel" onchange="ntOnCan()"><option value="">Seleccioná un cliente</option></select></div>
+      <div class="nt-row"><label class="nt-lbl">Tipo de tarea</label><select id="nt-tar" class="nt-sel"><option value="">Seleccioná una cancha</option></select></div>
+      <div class="nt-row" style="display:flex;gap:10px">
+        <div style="flex:1.4"><label class="nt-lbl">Fecha</label><input type="date" id="nt-fec" class="nt-inp"></div>
+        <div style="flex:1"><label class="nt-lbl">Desde</label><input type="time" id="nt-des" class="nt-inp"></div>
+        <div style="flex:1"><label class="nt-lbl">Hasta</label><input type="time" id="nt-has" class="nt-inp"></div>
+      </div>
+      <div class="nt-row"><label class="nt-lbl">Asignar a (opcional)</label><div id="nt-asig" style="display:flex;flex-wrap:wrap;gap:6px"><span style="font-size:12px;color:var(--tx3)">Seleccioná un cliente</span></div></div>
+      <div class="nt-row"><label class="nt-lbl">Especificaciones (opcional)</label><textarea id="nt-spc" rows="2" class="nt-inp" style="resize:none" placeholder="Detalles, dosis, notas..."></textarea></div>
+    </div>
+    <!-- MAQUINARIA -->
+    <div id="nt-form-maq" style="display:none">
+      <div class="nt-row"><label class="nt-lbl">Máquina</label><select id="nt-maq" class="nt-sel" onchange="ntOnMaq()"><option value="">Seleccionar...</option></select></div>
+      <div class="nt-row" id="nt-svc-wrap" style="display:none"><label class="nt-lbl">Tareas de service</label><div id="nt-svc" style="border:0.5px solid var(--bo2);border-radius:var(--br);padding:4px 12px;background:var(--bg2)"></div></div>
+      <div class="nt-row" style="display:flex;gap:10px">
+        <div style="flex:1.4"><label class="nt-lbl">Fecha</label><input type="date" id="nt-fec2" class="nt-inp"></div>
+        <div style="flex:1"><label class="nt-lbl">Desde</label><input type="time" id="nt-des2" class="nt-inp"></div>
+        <div style="flex:1"><label class="nt-lbl">Hasta</label><input type="time" id="nt-has2" class="nt-inp"></div>
+      </div>
+      <div class="nt-row"><label class="nt-lbl">Asignar a (opcional)</label><div id="nt-asig2" style="display:flex;flex-wrap:wrap;gap:6px"><span style="font-size:12px;color:var(--tx3)">Seleccioná una máquina</span></div></div>
+      <div class="nt-row"><label class="nt-lbl">Observaciones (opcional)</label><textarea id="nt-obs" rows="2" class="nt-inp" style="resize:none" placeholder="Notas del service..."></textarea></div>
+    </div>
+    <!-- RECURRENTE (admin) -->
+    <div id="nt-rec-wrap" style="display:none;border-top:0.5px solid var(--bo);padding-top:12px;margin-top:4px">
+      <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="nt-rec-chk" onchange="ntToggleRec()" style="accent-color:var(--blue);width:16px;height:16px"> <span style="font-weight:600">📅 Tarea recurrente</span></label>
+      <div id="nt-rec-fields" style="display:none;margin-top:12px">
+        <label class="nt-lbl">Días de la semana</label>
+        <div id="nt-dias" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+          <button type="button" class="ntd" data-d="1" onclick="this.classList.toggle('sel')">Lu</button>
+          <button type="button" class="ntd" data-d="2" onclick="this.classList.toggle('sel')">Ma</button>
+          <button type="button" class="ntd" data-d="3" onclick="this.classList.toggle('sel')">Mi</button>
+          <button type="button" class="ntd" data-d="4" onclick="this.classList.toggle('sel')">Ju</button>
+          <button type="button" class="ntd" data-d="5" onclick="this.classList.toggle('sel')">Vi</button>
+          <button type="button" class="ntd" data-d="6" onclick="this.classList.toggle('sel')">Sá</button>
+          <button type="button" class="ntd" data-d="0" onclick="this.classList.toggle('sel')">Do</button>
+        </div>
+        <label class="nt-lbl">Programar hasta</label>
+        <input type="date" id="nt-hasta" class="nt-inp">
+      </div>
+    </div>
+    <div id="nt-warn" style="display:none;font-size:12px;color:var(--red);margin:10px 0;padding:8px 10px;background:rgba(163,45,45,.08);border-radius:var(--br)"></div>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button onclick="CM3campo('mnt-modal')" style="flex:1;padding:13px;border-radius:var(--br);border:0.5px solid var(--bo2);background:none;font-size:14px;cursor:pointer;font-family:inherit">Cancelar</button>
+      <button id="nt-save-btn" onclick="saveNuevaTarea()" style="flex:2;padding:13px;border-radius:var(--br);border:none;background:var(--blue);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Crear tarea</button>
+    </div>
+  </div>
+</div>
+
+
 <div id="mlc-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:flex-end;justify-content:center">
   <div style="background:var(--bg);border-radius:16px 16px 0 0;padding:20px 20px 32px;width:100%;max-width:500px">
     <div style="font-size:15px;font-weight:700;margin-bottom:4px" id="mlc-title"></div>
