@@ -2426,7 +2426,8 @@ function getConsultaTasks(){
     else{if(d.getMonth()!==_conMonth||d.getFullYear()!==_conYear)return false;}
     return true;
   });
-  out.sort(function(a,b){return (a.fec+(a.des||'')).localeCompare(b.fec+(b.des||''));});
+  // Más reciente primero
+  out.sort(function(a,b){return (b.fec+(b.des||'')).localeCompare(a.fec+(a.des||''));});
   return out;
 }
 function renderConsulta(){
@@ -2463,21 +2464,40 @@ function renderConsulta(){
   });
   ct.innerHTML=h;
 }
+// Separa la especificación en productos usando "+" como separador.
+// "6 kg sulfato de hierro + 5 lts clorotalonil" → ["6 kg sulfato de hierro","5 lts clorotalonil"]
+// Si no hay "+", devuelve un solo elemento. Si está vacía, devuelve [].
+function splitSpc(spc){
+  if(!spc)return[];
+  return String(spc).split('+').map(function(s){return s.trim();}).filter(function(s){return s.length>0;});
+}
 function exportConsulta(){
   var list=getConsultaTasks();
   if(!list.length){alert('No hay tareas para exportar con esos filtros');return;}
   var periodo=_conVista==='anio'?('Anio_'+_conYear):(MES[_conMonth]+'_'+_conYear);
-  var header=['Fecha','Cliente','Cancha','Tarea','Especificacion','Funcionarios','Completada por','Maquina','Accesorio','Hs inicio','Hs fin','Desde','Hasta','Observaciones'];
+  // Cuántas columnas de especificación hacen falta = máximo de productos en las tareas filtradas
+  var maxSpc=1;
+  list.forEach(function(t){var n=splitSpc(t.spc).length;if(n>maxSpc)maxSpc=n;});
+  var spcCols=[];
+  for(var k=1;k<=maxSpc;k++)spcCols.push('Especificacion'+k);
+  var header=['Fecha','Cliente','Cancha','Tarea'].concat(spcCols,['Funcionarios','Completada por','Maquina','Accesorio','Hs inicio','Hs fin','Desde','Hasta','Observaciones']);
   var rows=[header];
   list.forEach(function(t){
     var c=clientes.find(function(x){return x.id===t.cli;});
-    rows.push([t.fec,c?c.nombre:'',t.can||'',t.tar||'',t.spc||'',tFuns(t).join(', '),t.compPor||'',t.maq||'',t.maq2||'',
+    var parts=splitSpc(t.spc);
+    var spcVals=[];
+    for(var k=0;k<maxSpc;k++)spcVals.push(parts[k]||'');
+    rows.push([t.fec,c?c.nombre:'',t.can||'',t.tar||''].concat(spcVals,[
+      tFuns(t).join(', '),t.compPor||'',t.maq||'',t.maq2||'',
       (t.hsIni!==null&&t.hsIni!==undefined?t.hsIni:''),(t.hsFin!==null&&t.hsFin!==undefined?t.hsFin:''),
-      t.des||'',t.has||'',t.obs||'']);
+      t.des||'',t.has||'',t.obs||'']));
   });
   if(window.XLSX){
     var ws=XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols']=[{wch:12},{wch:16},{wch:14},{wch:16},{wch:34},{wch:20},{wch:16},{wch:16},{wch:14},{wch:9},{wch:9},{wch:7},{wch:7},{wch:30}];
+    var cols=[{wch:12},{wch:16},{wch:14},{wch:16}];
+    for(var k=0;k<maxSpc;k++)cols.push({wch:28});
+    cols=cols.concat([{wch:20},{wch:16},{wch:16},{wch:14},{wch:9},{wch:9},{wch:7},{wch:7},{wch:30}]);
+    ws['!cols']=cols;
     var wb=XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb,ws,'Consulta');
     XLSX.writeFile(wb,'Consulta_'+periodo+'.xlsx');
