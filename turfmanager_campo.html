@@ -359,6 +359,17 @@ function loadCampoCache(){
 function saveCampoCache(){
   try{localStorage.setItem('campo_cache',JSON.stringify({clientes:clientes,funcionarios:funcionarios,maquinas:maquinas,tasks:tasks,recs:recs,checklists:checklists,savedAt:new Date().toISOString(),v:Date.now()}));}
   catch(e){}}
+// Traduce un error técnico a un motivo entendible para el usuario.
+function sbMotivoCampo(e){
+  if(!navigator.onLine)return'Sin internet. Revisá tu conexión (wifi o datos).';
+  if(!e)return'No se pudo contactar la base de datos.';
+  var m=(e&&e.message?e.message:String(e));
+  if(/401|invalid api key|jwt|apikey/i.test(m))return'Error de autenticación: la clave de acceso no es válida. Avisá al administrador.';
+  if(/403|permission|rls|policy/i.test(m))return'Acceso denegado por la base de datos. Avisá al administrador.';
+  if(/failed to fetch|networkerror|load failed|timeout|timed out/i.test(m))return'La base de datos no responde. Tenés internet, pero el servidor no contesta. Probá de nuevo en unos minutos.';
+  if(/5\d\d/.test(m))return'La base de datos está con errores. Probá de nuevo en unos minutos.';
+  return'No se pudo conectar con la base de datos.';
+}
 async function loadData(){
   try{
     var[cliRows,funRows,maqRows,tarRows,recRows,cfgRows]=await Promise.all([
@@ -388,7 +399,9 @@ async function loadData(){
     return true;
   }catch(e){
     sbOnline=false;
-    showMsg('Sin conexión a internet. La app requiere conexión para funcionar.');
+    _sbLastErr=e;
+    console.warn('TurfManager · error cargando desde Supabase:',e);
+    showMsg(sbMotivoCampo(e));
     return false;
   }
 }
@@ -422,7 +435,7 @@ async function doLogin(){
   // Load data if not loaded yet
   if(!funcionarios.length){
     var ok=await loadData();
-    if(!ok){errEl.textContent='Sin conexion. Intentalo de nuevo.';errEl.style.display='block';return;}
+    if(!ok){errEl.textContent=sbMotivoCampo(_sbLastErr);errEl.style.display='block';return;}
   }
   // Find by username or first name
   if(input==='admin'){enterApp('admin');return;}
@@ -442,6 +455,7 @@ async function doLogin(){
 }
 
 var isAdmin=false;
+var _sbLastErr=null;
 var isEncargado=false;
 var encargadoClientes=[];
 function enterApp(nombre){
@@ -1646,22 +1660,20 @@ function ntRenderAsignar(wrapId,cli){
 }
 
 function openNuevaTarea(){
-  // Encargado con un solo cliente → ese cliente queda fijado por default
+  // Encargado con un solo cliente → ese cliente queda tildado por default
   var soloUnCli=(isEncargado&&encargadoClientes.length===1)?encargadoClientes[0]:null;
-  // Clientes (admin: all; encargado: only theirs)
+  // Clientes (admin: todos; encargado: solo los suyos) — checkboxes multi-selección
   var cliList=isAdmin?clientes:clientes.filter(function(c){return encargadoClientes.indexOf(c.id)>=0;});
-  var cliSel=document.getElementById('nt-cli');
-  cliSel.innerHTML=soloUnCli?'':'<option value="">Seleccionar...</option>';
-  cliList.forEach(function(c){var o=document.createElement('option');o.value=c.id;o.textContent=c.nombre;if(soloUnCli&&c.id===soloUnCli)o.selected=true;cliSel.appendChild(o);});
-  if(soloUnCli){
-    ntOnCli(); // cascada: canchas + asignar del único cliente
-  } else {
-    document.getElementById('nt-can').innerHTML='<option value="">Seleccioná un cliente</option>';
-    document.getElementById('nt-tar').innerHTML='<option value="">Seleccioná una cancha</option>';
-    document.getElementById('nt-asig').innerHTML='<span style="font-size:12px;color:var(--tx3)">Seleccioná un cliente</span>';
-    document.getElementById('nt-maq-c').innerHTML='<option value="">Sin máquina</option>';
-    document.getElementById('nt-maq2c-row').style.display='none';
-  }
+  var cliWrap=document.getElementById('nt-cli-multi');
+  cliWrap.innerHTML='';
+  cliList.forEach(function(c){
+    var lbl=document.createElement('label');
+    lbl.style.cssText='display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:6px 12px;border:1px solid var(--bo2);border-radius:20px;background:var(--bg);cursor:pointer';
+    var chk=(soloUnCli&&c.id===soloUnCli)?' checked':'';
+    lbl.innerHTML='<input type="checkbox" value="'+c.id+'"'+chk+' onchange="ntOnCli()" style="accent-color:var(--blue)"> '+c.nombre;
+    cliWrap.appendChild(lbl);
+  });
+  ntOnCli(); // cascada: canchas + tipos + asignar + máquinas
   // Máquinas: admin=todas; encargado con 1 cliente=solo las de ese cliente (sin generales);
   //           encargado con 2+ clientes=generales + las de sus clientes
   var maqList;
@@ -1699,39 +1711,81 @@ function ntSetTipo(t){
   var tc=document.getElementById('nt-tab-cancha');var tm=document.getElementById('nt-tab-maq');
   tc.classList.toggle('on',t==='cancha');tm.classList.toggle('on',t==='maq');
 }
-function ntOnCli(){
-  var cid=parseInt(document.getElementById('nt-cli').value)||null;
-  var canSel=document.getElementById('nt-can');
-  canSel.innerHTML='<option value="">Seleccionar...</option>';
-  var c=clientes.find(function(x){return x.id===cid;});
-  if(c&&c.canchas){c.canchas.forEach(function(ca){var nm=ntCanNombre(ca);var tipo=ntCanTipo(ca);var o=document.createElement('option');o.value=nm;o.dataset.tipo=tipo;o.textContent=nm+(tipo==='sintetica'?' [S]':'');canSel.appendChild(o);});}
-  document.getElementById('nt-tar').innerHTML='<option value="">Seleccioná una cancha</option>';
-  ntRenderAsignar('nt-asig',cid);
-  ntFillMaqCancha();
+// Clientes tildados (ids)
+function ntCliSel(){
+  return [...document.querySelectorAll('#nt-cli-multi input:checked')].map(function(i){return parseInt(i.value);});
 }
+// Canchas tildadas → [{cli, can}]
+function ntCanSel(){
+  return [...document.querySelectorAll('#nt-can-multi input:checked')].map(function(i){
+    return {cli:parseInt(i.dataset.cli),can:i.value};
+  });
+}
+// Al cambiar los clientes: repuebla canchas (agrupadas por cliente), tipos, asignar y máquinas
+function ntOnCli(){
+  var cids=ntCliSel();
+  var wrap=document.getElementById('nt-can-multi');
+  // Preservar tildes previas (cliente|cancha)
+  var prev={};ntCanSel().forEach(function(x){prev[x.cli+'|'+x.can]=true;});
+  wrap.innerHTML='';
+  if(!cids.length){
+    wrap.innerHTML='<span style="font-size:12px;color:var(--tx3)">Seleccioná uno o más clientes</span>';
+  } else {
+    cids.forEach(function(cid){
+      var c=clientes.find(function(x){return x.id===cid;});
+      if(!c)return;
+      if(cids.length>1){
+        var hd=document.createElement('div');
+        hd.style.cssText='font-size:11px;font-weight:700;color:var(--tx2);margin:6px 0 3px;text-transform:uppercase;letter-spacing:.04em';
+        hd.textContent=c.nombre;
+        wrap.appendChild(hd);
+      }
+      (c.canchas||[]).forEach(function(ca){
+        var nm=ntCanNombre(ca);var tipo=ntCanTipo(ca);
+        var lbl=document.createElement('label');
+        lbl.style.cssText='display:flex;align-items:center;gap:9px;padding:6px 0;cursor:pointer;font-size:13px';
+        var chk=prev[cid+'|'+nm]?' checked':'';
+        lbl.innerHTML='<input type="checkbox" value="'+nm.replace(/"/g,'&quot;')+'" data-cli="'+cid+'" data-tipo="'+tipo+'"'+chk+' onchange="ntOnCan()" style="accent-color:var(--blue);width:16px;height:16px"> '+nm+(tipo==='sintetica'?' <span style="color:var(--tx3);font-size:11px">[S]</span>':'');
+        wrap.appendChild(lbl);
+      });
+    });
+  }
+  ntOnCan();
+}
+// Al cambiar las canchas: tipos de tarea según naturaleza y asignación según nº de clientes
 function ntOnCan(){
-  var canSel=document.getElementById('nt-can');
-  var opt=canSel.options[canSel.selectedIndex];
-  var tipo=opt?opt.dataset.tipo:'';
-  var lista=tipo==='sintetica'?tiposTareaSint:tiposTarea;
+  var cids=ntCliSel();
+  var sel=ntCanSel();
+  // Tipos: si TODAS las canchas tildadas son sintéticas → lista sintética; si no, natural
+  var chosen=[...document.querySelectorAll('#nt-can-multi input:checked')];
+  var allSint=chosen.length>0&&chosen.every(function(i){return i.dataset.tipo==='sintetica';});
+  var lista=allSint?tiposTareaSint:tiposTarea;
   var tarSel=document.getElementById('nt-tar');
+  var prevTar=tarSel.value;
   tarSel.innerHTML='<option value="">Seleccionar...</option>';
   lista.forEach(function(t){var o=document.createElement('option');o.value=t;o.textContent=t;tarSel.appendChild(o);});
+  if(prevTar){var f=tarSel.querySelector('option[value="'+prevTar.replace(/"/g,'&quot;')+'"]');if(f)tarSel.value=prevTar;}
+  // Asignar: solo con UN cliente (con 2+ se crea sin funcionario)
+  var asig=document.getElementById('nt-asig');
+  if(cids.length===1){ntRenderAsignar('nt-asig',cids[0]);}
+  else if(cids.length>1){asig.innerHTML='<span style="font-size:12px;color:var(--tx3)">Varios clientes seleccionados — las tareas se crean sin funcionario (se asignan después)</span>';}
+  else {asig.innerHTML='<span style="font-size:12px;color:var(--tx3)">Seleccioná un cliente</span>';}
   ntFillMaqCancha();
 }
 // Visibilidad de máquina para tareas de cancha según rol:
 //  - encargado de 1 cliente → solo máquinas asignadas a ese cliente (sin generales)
 //  - encargado de 2+ clientes → todas las máquinas
 //  - admin → generales + máquinas del cliente seleccionado (paridad con la web)
-function ntMaqRoleOkCancha(m,cid){
+function ntMaqRoleOkCancha(m,cids){
   var soloUnCli=(isEncargado&&encargadoClientes.length===1)?encargadoClientes[0]:null;
   if(soloUnCli)return(m.scope==='cliente'&&m.cliId===soloUnCli);
   if(isEncargado)return true;
-  return(m.scope==='general'||(m.scope==='cliente'&&m.cliId===cid));
+  // Admin: generales + máquinas de cualquiera de los clientes tildados
+  return(m.scope==='general'||(m.scope==='cliente'&&cids.indexOf(m.cliId)>=0));
 }
 // Máquina para tareas de CANCHA (excluye accesorios, filtradas por rol y por compatibilidad de tarea)
 function ntFillMaqCancha(){
-  var cid=parseInt(document.getElementById('nt-cli').value)||0;
+  var cids=ntCliSel();
   var tar=document.getElementById('nt-tar').value;
   var sel=document.getElementById('nt-maq-c');
   if(!sel)return;
@@ -1739,7 +1793,7 @@ function ntFillMaqCancha(){
   sel.innerHTML='<option value="">Sin máquina</option>';
   maquinas.filter(function(m){
     return m.cat!=='accesorio'
-      &&ntMaqRoleOkCancha(m,cid)
+      &&ntMaqRoleOkCancha(m,cids)
       &&(!tar||!m.tareas||!m.tareas.length||m.tareas.indexOf(tar)>=0);
   }).forEach(function(m){
     var o=document.createElement('option');
@@ -1752,7 +1806,7 @@ function ntFillMaqCancha(){
 }
 // Segundo selector (accesorio/acoplado) — solo si la máquina principal es un vehículo
 function ntOnMaqCancha(){
-  var cid=parseInt(document.getElementById('nt-cli').value)||0;
+  var cids=ntCliSel();
   var tar=document.getElementById('nt-tar').value;
   var mainMaq=document.getElementById('nt-maq-c').value;
   var row=document.getElementById('nt-maq2c-row');
@@ -1765,7 +1819,7 @@ function ntOnMaqCancha(){
   sel.innerHTML='<option value="">Sin accesorio</option>';
   maquinas.filter(function(m){
     return m.cat==='accesorio'
-      &&ntMaqRoleOkCancha(m,cid)
+      &&ntMaqRoleOkCancha(m,cids)
       &&(!tar||!m.tareas||!m.tareas.length||m.tareas.indexOf(tar)>=0);
   }).forEach(function(m){
     var o=document.createElement('option');
@@ -1804,20 +1858,22 @@ async function saveNuevaTarea(){
   document.getElementById('nt-warn').style.display='none';
   var isRec=isAdmin&&document.getElementById('nt-rec-chk').checked;
   var base,fec;
+  var targets=null; // [{cli,can}] para multi-cancha
   if(_ntTipo==='cancha'){
-    var cid=parseInt(document.getElementById('nt-cli').value)||null;
-    var can=document.getElementById('nt-can').value;
+    var cids=ntCliSel();
+    targets=ntCanSel();
     var tar=document.getElementById('nt-tar').value;
     fec=document.getElementById('nt-fec').value;
-    if(!cid)return ntWarn('Seleccioná un cliente');
-    if(!can)return ntWarn('Seleccioná una cancha');
+    if(!cids.length)return ntWarn('Seleccioná al menos un cliente');
+    if(!targets.length)return ntWarn('Seleccioná al menos una cancha');
     if(!tar)return ntWarn('Seleccioná el tipo de tarea');
     if(!fec)return ntWarn('Seleccioná una fecha');
-    var funs=[...document.querySelectorAll('#nt-asig input:checked')].map(function(i){return i.value;});
+    // Con 2+ clientes se crea sin funcionario (decisión de diseño)
+    var funs=cids.length===1?[...document.querySelectorAll('#nt-asig input:checked')].map(function(i){return i.value;}):[];
     var maqC=document.getElementById('nt-maq-c').value||'';
     var maq2C='';var m2row=document.getElementById('nt-maq2c-row');
     if(m2row&&m2row.style.display!=='none')maq2C=document.getElementById('nt-maq2c').value||'';
-    base={cli:cid,can:can,tar:tar,funs:funs,maq:maqC,maq2:maq2C,des:document.getElementById('nt-des').value,has:document.getElementById('nt-has').value,spc:document.getElementById('nt-spc').value||'',chk:{}};
+    base={cli:null,can:null,tar:tar,funs:funs,maq:maqC,maq2:maq2C,des:document.getElementById('nt-des').value,has:document.getElementById('nt-has').value,spc:document.getElementById('nt-spc').value||'',chk:{}};
   } else {
     var maqNom=document.getElementById('nt-maq').value;
     if(!maqNom)return ntWarn('Seleccioná una máquina');
@@ -1828,6 +1884,7 @@ async function saveNuevaTarea(){
     var funs2=[...document.querySelectorAll('#nt-asig2 input:checked')].map(function(i){return i.value;});
     var chk={};[...document.querySelectorAll('#nt-svc input:checked')].forEach(function(i){chk[i.value]=false;});
     base={cli:maqCli,can:'',tar:'Mant. Maquinaria',funs:funs2,maq:maqNom,maq2:'',des:document.getElementById('nt-des2').value,has:document.getElementById('nt-has2').value,spc:document.getElementById('nt-obs').value||'',chk:chk};
+    targets=[{cli:maqCli,can:''}];
   }
   var btn=document.getElementById('nt-save-btn');
   if(btn){btn.disabled=true;btn.textContent='Guardando...';}
@@ -1837,22 +1894,37 @@ async function saveNuevaTarea(){
       if(!dias.length){ntRestoreBtn();return ntWarn('Seleccioná al menos un día');}
       var hasta=document.getElementById('nt-hasta').value||(new Date().getFullYear()+'-12-31');
       var maxDate=fD(aD(new Date(),365));if(hasta>maxDate)hasta=maxDate;
-      var dup=recs.some(function(r){return r.cli===base.cli&&r.can===base.can&&r.tar===base.tar&&r.des===base.des&&r.has===base.has&&(r.dias.slice().sort().join(',')===dias.slice().sort().join(','));});
-      if(dup){ntRestoreBtn();return ntWarn('Ya existe una recurrente idéntica');}
-      var newRec={id:nextRecIdCampo(),dias:dias,hasta:hasta,cli:base.cli,can:base.can,tar:base.tar,funs:base.funs,maq:base.maq,des:base.des,has:base.has,spc:base.spc,skip:[],chk:base.chk||{}};
-      recs.push(newRec);
-      await saveRecCampo(newRec);
+      // Una recurrente por cada cancha tildada
+      var dupT=targets.filter(function(g){
+        return recs.some(function(r){return r.cli===g.cli&&r.can===g.can&&r.tar===base.tar&&r.des===base.des&&r.has===base.has&&(r.dias.slice().sort().join(',')===dias.slice().sort().join(','));});
+      });
+      if(dupT.length===targets.length){ntRestoreBtn();return ntWarn('Ya existe'+(targets.length>1?'n':'')+' recurrente'+(targets.length>1?'s':'')+' idéntica'+(targets.length>1?'s':'')+' para esa'+(targets.length>1?'s':'')+' cancha'+(targets.length>1?'s':''));}
+      var creadasR=0;
+      for(var i=0;i<targets.length;i++){
+        var g=targets[i];
+        if(dupT.indexOf(g)>=0)continue; // saltear las que ya existen
+        var newRec={id:nextRecIdCampo(),dias:dias,hasta:hasta,cli:g.cli,can:g.can,tar:base.tar,funs:base.funs,maq:base.maq,des:base.des,has:base.has,spc:base.spc,skip:[],chk:base.chk||{}};
+        recs.push(newRec);
+        await saveRecCampo(newRec);
+        creadasR++;
+      }
       await GRTcampo();
       CM3campo('mnt-modal');
       render();
+      showSaveStatus('✓ '+creadasR+' recurrente'+(creadasR===1?'':'s')+' creada'+(creadasR===1?'':'s'),true);
     } else {
-      var t={id:nextTaskIdCampo(),cli:base.cli,can:base.can,tar:base.tar,funs:base.funs,maq:base.maq,maq2:base.maq2||'',
-        fec:fec,des:base.des,has:base.has,spc:base.spc||'',est:'pendiente',
-        obs:base.tar==='Mant. Maquinaria'?(base.spc||''):'',recId:null,chk:base.chk||{},hsIni:null,hsFin:null,compPor:null};
-      tasks.push(t);
-      await saveTaskCampo(t);
+      // Una tarea por cada cancha tildada
+      var nuevas=[];
+      targets.forEach(function(g){
+        nuevas.push({id:nextTaskIdCampo(),cli:g.cli,can:g.can,tar:base.tar,funs:base.funs,maq:base.maq,maq2:base.maq2||'',
+          fec:fec,des:base.des,has:base.has,spc:base.spc||'',est:'pendiente',
+          obs:base.tar==='Mant. Maquinaria'?(base.spc||''):'',recId:null,chk:base.chk||{},hsIni:null,hsFin:null,compPor:null});
+      });
+      nuevas.forEach(function(t){tasks.push(t);});
+      for(var j=0;j<nuevas.length;j++){await saveTaskCampo(nuevas[j]);}
       CM3campo('mnt-modal');
       selectDay(fec);setView('dia');
+      showSaveStatus('✓ '+nuevas.length+' tarea'+(nuevas.length===1?'':'s')+' creada'+(nuevas.length===1?'':'s'),true);
     }
   }catch(e){
     console.warn('saveNuevaTarea error',e);
@@ -2021,8 +2093,10 @@ initLogin();
     </div>
     <!-- CANCHA -->
     <div id="nt-form-cancha">
-      <div class="nt-row"><label class="nt-lbl">Cliente</label><select id="nt-cli" class="nt-sel" onchange="ntOnCli()"><option value="">Seleccionar...</option></select></div>
-      <div class="nt-row"><label class="nt-lbl">Cancha</label><select id="nt-can" class="nt-sel" onchange="ntOnCan()"><option value="">Seleccioná un cliente</option></select></div>
+      <div class="nt-row"><label class="nt-lbl">Cliente(s)</label>
+        <div id="nt-cli-multi" style="display:flex;flex-wrap:wrap;gap:6px"></div></div>
+      <div class="nt-row"><label class="nt-lbl">Cancha(s)</label>
+        <div id="nt-can-multi" style="max-height:170px;overflow-y:auto;border:0.5px solid var(--bo2);border-radius:var(--br);padding:8px 11px;background:var(--bg2)"><span style="font-size:12px;color:var(--tx3)">Seleccioná uno o más clientes</span></div></div>
       <div class="nt-row"><label class="nt-lbl">Tipo de tarea</label><select id="nt-tar" class="nt-sel" onchange="ntFillMaqCancha()"><option value="">Seleccioná una cancha</option></select></div>
       <div class="nt-row" style="display:flex;gap:10px">
         <div style="flex:1.4"><label class="nt-lbl">Fecha</label><input type="date" id="nt-fec" class="nt-inp"></div>

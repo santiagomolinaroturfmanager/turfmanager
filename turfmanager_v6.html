@@ -1830,21 +1830,40 @@ function recDragSolo(){
   _pendingDrag=null;
   CM3('mdrag-confirm');CM3('mrec-drag');dragId=null;saveState();render();
 }
-function recDragTodas(){
+var _recDragBusy=false;
+async function recDragTodas(){
   if(!_pendingDrag)return;
   var t=tasks.find(function(x){return x.id===_pendingDrag.tid;});if(!t)return;
   var rec=recs.find(function(r){return r.id===t.recId;});
   var hoy=fD(new Date());
+  if(_recDragBusy)return;
+  _recDragBusy=true;
   if(rec){
     var nDow=new Date(_pendingDrag.newFec+'T12:00').getDay();
     var oDow=new Date(t.fec+'T12:00').getDay();
     rec.dias=rec.dias.map(function(d){return d===oDow?nDow:d;});
     rec.des=_pendingDrag.newDes;rec.has=_pendingDrag.newHas;
-    tasks=tasks.filter(function(tk){return!(tk.recId===t.recId&&tk.fec>=hoy&&tk.est==='pendiente');});
+    // 1) Persistir la recurrente (antes solo cambiaba en memoria → revertía al recargar)
+    await saveRecToSupabase(rec);
+    // 2) Borrar las tareas futuras pendientes DIRECTO en Supabase y ESPERAR el DELETE
+    //    (antes solo se borraban del array local → volvían al recargar y duplicaban)
+    try{
+      await fetch(SB_URL+'/rest/v1/tareas?rec_id=eq.'+rec.id+'&fec=gte.'+hoy+'&est=eq.pendiente',
+        {method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
+    }catch(e){console.warn('recDragTodas delete error',e);}
+    tasks=tasks.filter(function(tk){return!(tk.recId===rec.id&&tk.fec>=hoy&&tk.est==='pendiente');});
+    // 3) Recién ahora regenerar (GRT persiste las nuevas)
     GRT();
+    // Si la tarea arrastrada no entró en el borrado (ej. fecha pasada), moverla a mano
+    if(tasks.indexOf(t)>=0){
+      t.fec=_pendingDrag.newFec;t.des=_pendingDrag.newDes;t.has=_pendingDrag.newHas;t._dirty=true;
+      saveTaskToSupabase(t);
+    }
+  } else {
+    t.fec=_pendingDrag.newFec;t.des=_pendingDrag.newDes;t.has=_pendingDrag.newHas;t._dirty=true;
+    saveTaskToSupabase(t);
   }
-  t.fec=_pendingDrag.newFec;t.des=_pendingDrag.newDes;t.has=_pendingDrag.newHas;t._dirty=true;
-  saveTaskToSupabase(t);
+  _recDragBusy=false;
   _pendingDrag=null;
   CM3('mdrag-confirm');CM3('mrec-drag');dragId=null;saveState();render();
 }
@@ -1870,14 +1889,9 @@ function dropWeekNav(e,dir){
   cMon=aD(cMon,dir*7);
   dragId=null;saveState();render();
 }
-function ddr(e){
-  e.preventDefault();e.currentTarget.classList.remove('dov');
-  if(dragId===null)return;
-  const t=tasks.find(x=>x.id===dragId);if(!t||t.est!=='pendiente')return;
-  const dur=hDiff(t.des,t.has);const nh=parseInt(e.currentTarget.dataset.hour);
-  t.fec=e.currentTarget.dataset.date;t.des=String(nh).padStart(2,'0')+':00';t.has=String(Math.min(23,nh+Math.max(1,Math.round(dur)))).padStart(2,'0')+':00';
-  dragId=null;render();
-}
+// NOTA: la definición vieja de ddr() vivía acá. Era código muerto: una segunda
+// definición de ddr() más abajo la pisaba. Se eliminó para evitar confusión.
+// La versión activa abre el modal de confirmación y persiste vía dragConfirmMover().
 
 // ================================================================
 // FUNCIONARIO
@@ -3638,12 +3652,27 @@ const SB_KEY = 'sb_publishable_DW9Wvf4kOHMOBo-aA-W3tw_jjafLqPA';
 var sbOnline = true;
 var sbPendingSync = false;
 
-function setSBStatus(online){
+// Traduce un error técnico a un motivo entendible para el usuario.
+function sbMotivo(e){
+  if(!navigator.onLine)return{txt:'○ Sin internet',det:'Tu dispositivo no tiene conexión a internet.'};
+  if(!e)return{txt:'○ Sin conexion',det:'No se pudo contactar la base de datos.'};
+  var m=(e&&e.message?e.message:String(e));
+  if(/401|invalid api key|jwt|apikey/i.test(m))return{txt:'○ Error de autenticación',det:'La clave de acceso a la base de datos no es válida o fue cambiada.'};
+  if(/403|permission|rls|policy/i.test(m))return{txt:'○ Acceso denegado',det:'La base rechazó el permiso (403). Revisar políticas del proyecto.'};
+  if(/failed to fetch|networkerror|load failed|timeout|timed out/i.test(m))return{txt:'○ Base de datos no responde',det:'Internet funciona, pero Supabase no responde (puede estar pausado o con un incidente). Ver status.supabase.com'};
+  if(/5\d\d/.test(m))return{txt:'○ Base de datos con errores',det:'La base respondió con un error del servidor. Puede ser un incidente de Supabase.'};
+  return{txt:'○ Sin conexion',det:m.slice(0,300)};
+}
+function setSBStatus(online,err){
   sbOnline=online;
   var el=document.getElementById('sync-indicator');
   if(!el)return;
-  if(online){el.textContent='● Sincronizado';el.style.color='#639922';}
-  else{el.textContent='○ Sin conexion';el.style.color='#E8A838';}
+  if(online){el.textContent='● Sincronizado';el.style.color='#639922';el.title='Datos sincronizados con la base.';}
+  else{
+    var mo=sbMotivo(err);
+    el.textContent=mo.txt;el.style.color='#E8A838';el.title=mo.det;
+    console.warn('TurfManager · '+mo.txt+' → '+mo.det);
+  }
 }
 async function sbGet(table,params){
   // Fetch ALL rows in batches to bypass Supabase's default 1000-row limit.
@@ -3731,7 +3760,7 @@ async function syncToSupabase(){
   } catch(e){
     console.warn('Supabase sync failed:',e);
     sbPendingSync=true;
-    setSBStatus(false);
+    setSBStatus(false,e);
   }
 }
 
@@ -3858,7 +3887,7 @@ async function loadFromSupabase(){
     return true;
   }catch(e){
     console.warn('Error cargando desde Supabase:',e);
-    setSBStatus(false);
+    setSBStatus(false,e);
     return false;
   }
 }
