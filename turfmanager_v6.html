@@ -1038,8 +1038,8 @@ function render(){
         h+='<div class="chip st-'+t.est+'" id="chip-'+t.id+'" style="background:'+bg+';color:'+tx+cflStyle+selOutline+'"'+(_selectMode?'':dragAttr)+' onclick="'+chipOnclick+'">';
         h+='<b>'+t.tar+' - '+t.can+'</b>';
         var maqLabel=(t.maq?(t.maq+(t.maq2?' + '+t.maq2:'')):'');
-        var f24=function(h){if(!h)return h;var p=h.split(':');return String(parseInt(p[0])).padStart(2,'0')+':'+(p[1]||'00');};
-        h+='<span>'+f24(t.des)+'-'+f24(t.has)+(maqLabel?' · '+maqLabel:'')+'</span>';
+        // En la vista semanal se muestra el CLIENTE en vez del horario programado.
+        h+='<span>'+cN(t.cli)+(maqLabel?' · '+maqLabel:'')+'</span>';
         h+='</div>';
       });
       // Actividades deportivas chips
