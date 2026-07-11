@@ -419,8 +419,8 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
     <!-- CANCHAS section -->
     <div id="ntipo-canchas-sec">
     <div class="fg">
-      <div class="fr"><label>Cliente</label><select id="ncli" onchange="nUC()"><option value="">Seleccionar...</option></select></div>
-      <div class="fr"><label>Cancha</label><select id="ncan" onchange="nUC()"><option value="">—</option></select></div>
+      <div class="fr" style="grid-column:span 2"><label>Cliente(s)</label><div id="ncli-multi" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px"></div></div>
+      <div class="fr" style="grid-column:span 2"><label>Cancha(s)</label><div id="ncan-multi" style="max-height:160px;overflow-y:auto;border:0.5px solid var(--bo2);border-radius:var(--br);padding:8px 11px;margin-top:4px;background:var(--bg2)"><span style="font-size:12px;color:var(--tx3)">Elegí uno o más clientes</span></div></div>
       <div class="fr"><label>Tarea</label><select id="ntar" onchange="nUC()"></select></div>
       <div class="fr" style="grid-column:span 2"><label>Funcionarios <span style="font-weight:400;color:var(--tx3)">(uno o mas)</span></label><div id="nfun-checks" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;min-height:32px"></div></div>
       <div id="cfl-warn" style="display:none;grid-column:span 2;background:#FCEBEB;border:0.5px solid #F09595;border-radius:var(--br);padding:8px 12px;font-size:12px;color:var(--red);margin-top:-5px"></div>
@@ -824,7 +824,7 @@ function tareasDeCancha(cliId,nombre){
 function tFuns(t){return Array.isArray(t.funs)?t.funs:(t.fun?[t.fun]:[]);}
 function hayConflicto(funs,fec,des,has,excId){return[];}
 function nUCmaq2(){
-  var cid=parseInt(document.getElementById('ncli').value)||0;
+  var cids=ncliSel();
   var tar=document.getElementById('ntar').value;
   var mainMaq=document.getElementById('nmaq').value;
   var row=document.getElementById('nmaq2-row');
@@ -836,7 +836,7 @@ function nUCmaq2(){
   sel.innerHTML='<option value="">Sin accesorio</option>';
   maquinas.filter(function(m){
     return m.cat==='accesorio'
-      &&(m.scope==='general'||(m.scope==='cliente'&&m.cliId===cid))
+      &&(m.scope==='general'||(m.scope==='cliente'&&cids.indexOf(m.cliId)>=0))
       &&(!tar||!m.tareas||!m.tareas.length||m.tareas.indexOf(tar)>=0);
   }).forEach(function(m){
     var o=document.createElement('option');
@@ -916,8 +916,7 @@ function rebuildSelects(){
       mFunDrop.appendChild(lbl);
     });
   }
-  const nc=document.getElementById('ncli');nc.innerHTML='<option value="">Seleccionar...</option>';
-  clientes.forEach(c=>nc.innerHTML+=`<option value="${c.id}">${c.nombre}</option>`);
+  // (ncli ahora son checkboxes multi-cliente; se arman en nBuildCli/nUC)
   const nt=document.getElementById('ntar');nt.innerHTML='';
   tiposTarea.forEach(t=>nt.innerHTML+=`<option>${t}</option>`);
   const rc=document.getElementById('rcli');rc.innerHTML='<option value="">Cliente...</option>';
@@ -938,51 +937,90 @@ function rebuildSelects(){
   var mt2=document.getElementById('maq-tipo');if(mt2){mt2.innerHTML='';tiposMaquina.forEach(function(t){mt2.innerHTML+='<option>'+t+'</option>';});}
 }
 
+// Clientes tildados (ids) y canchas tildadas ([{cli,can}]) del alta multi
+function ncliSel(){return [...document.querySelectorAll('#ncli-multi input:checked')].map(function(i){return parseInt(i.value);});}
+function ncanSel(){return [...document.querySelectorAll('#ncan-multi input:checked')].map(function(i){return {cli:parseInt(i.dataset.cli),can:i.value};});}
+// Arma los chips checkbox de cliente (preChecked = array de ids a tildar)
+function nBuildCli(preChecked){
+  var wrap=document.getElementById('ncli-multi');if(!wrap)return;
+  var list=(typeof webIsEncargado!=='undefined'&&webIsEncargado)?clientes.filter(function(c){return webClientes.indexOf(c.id)>=0;}):clientes;
+  wrap.innerHTML='';
+  list.forEach(function(c){
+    var lbl=document.createElement('label');
+    lbl.style.cssText='display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:5px 11px;border:1px solid var(--bo2);border-radius:20px;background:var(--bg);cursor:pointer';
+    var ck=(preChecked&&preChecked.indexOf(c.id)>=0)?' checked':'';
+    lbl.innerHTML='<input type="checkbox" value="'+c.id+'"'+ck+' onchange="nUC()" style="accent-color:var(--blue)"> '+c.nombre;
+    wrap.appendChild(lbl);
+  });
+}
+// Al cambiar los clientes: repuebla canchas (checkbox, agrupadas por cliente)
 function nUC(){
-  var cid=parseInt(document.getElementById('ncli').value)||0;
-  var cs=document.getElementById('ncan'),prevCan=cs.value;
-  cs.innerHTML='<option value="">-</option>';
-  var cli=clientes.find(function(x){return x.id===cid;});
-  if(cli){cli.canchas.forEach(function(ca){
-    var nm=canNombre(ca),tipo=canTipo(ca);
-    var o=document.createElement('option');
-    o.value=nm; o.textContent=nm+(tipo==='sintetica'?' [S]':'');
-    cs.appendChild(o);
-  });}
-  if(prevCan){var f=cs.querySelector('option[value="'+prevCan+'"]');if(f)cs.value=prevCan;}
-  var canVal=cs.value;
+  var cids=ncliSel();
+  var wrap=document.getElementById('ncan-multi');if(!wrap)return;
+  var prev={};ncanSel().forEach(function(x){prev[x.cli+'|'+x.can]=true;});
+  wrap.innerHTML='';
+  if(!cids.length){
+    wrap.innerHTML='<span style="font-size:12px;color:var(--tx3)">Elegí uno o más clientes</span>';
+  } else {
+    cids.forEach(function(cid){
+      var cli=clientes.find(function(x){return x.id===cid;});if(!cli)return;
+      if(cids.length>1){var hd=document.createElement('div');hd.style.cssText='font-size:11px;font-weight:700;color:var(--tx2);margin:6px 0 3px;text-transform:uppercase;letter-spacing:.04em';hd.textContent=cli.nombre;wrap.appendChild(hd);}
+      (cli.canchas||[]).forEach(function(ca){
+        var nm=canNombre(ca),tipo=canTipo(ca);
+        var lbl=document.createElement('label');
+        lbl.style.cssText='display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;font-size:13px';
+        var ck=prev[cid+'|'+nm]?' checked':'';
+        lbl.innerHTML='<input type="checkbox" value="'+nm.replace(/"/g,'&quot;')+'" data-cli="'+cid+'" data-tipo="'+tipo+'"'+ck+' onchange="nUCcan()" style="accent-color:var(--blue);width:15px;height:15px"> '+nm+(tipo==='sintetica'?' [S]':'');
+        wrap.appendChild(lbl);
+      });
+    });
+  }
+  nUCcan();
+}
+// Al cambiar las canchas: tarea (según naturaleza), máquinas y funcionarios
+function nUCcan(){
+  var cids=ncliSel();
+  var chosen=[...document.querySelectorAll('#ncan-multi input:checked')];
+  var allSint=chosen.length>0&&chosen.every(function(i){return i.dataset.tipo==='sintetica';});
+  var lista=allSint?tiposTareaSint:tiposTarea;
   var nt=document.getElementById('ntar'),prevTar=nt.value;
   nt.innerHTML='';
-  var tareas=tareasDeCancha(cid,canVal);
-  tareas.forEach(function(t){var o=document.createElement('option');o.textContent=t;nt.appendChild(o);});
-  if(tareas.indexOf(prevTar)>=0)nt.value=prevTar;
+  lista.forEach(function(t){var o=document.createElement('option');o.textContent=t;nt.appendChild(o);});
+  if(lista.indexOf(prevTar)>=0)nt.value=prevTar;
   var tar=nt.value;
-  var nm2=document.getElementById('nmaq');
+  var nm2=document.getElementById('nmaq'),prevMaq=nm2.value;
   nm2.innerHTML='<option value="">Sin maquina</option>';
   maquinas.filter(function(m){
     return m.cat!=='accesorio'
-      &&(m.scope==='general'||(m.scope==='cliente'&&m.cliId===cid))
+      &&(m.scope==='general'||(m.scope==='cliente'&&cids.indexOf(m.cliId)>=0))
       &&(!tar||!m.tareas||!m.tareas.length||m.tareas.indexOf(tar)>=0);
   }).forEach(function(m){
-    var o=document.createElement('option');
-    var catTag=m.cat==='vehiculo'?' 🚜':'';
-    o.value=m.nombre; o.textContent=m.nombre+catTag+' ('+(+m.hs||0).toFixed(1)+'hs)';
+    var o=document.createElement('option');var catTag=m.cat==='vehiculo'?' 🚜':'';
+    o.value=m.nombre;o.textContent=m.nombre+catTag+(m.scope==='cliente'&&m.cliId?' ('+cN(m.cliId)+')':'')+' ('+(+m.hs||0).toFixed(1)+'hs)';
     nm2.appendChild(o);
   });
+  if(prevMaq){var fm=nm2.querySelector('option[value="'+prevMaq.replace(/"/g,'&quot;')+'"]');if(fm)nm2.value=prevMaq;}
   nUCmaq2();
   var wrap=document.getElementById('nfun-checks');
   if(wrap){
-    var funs=cid?funcionarios.filter(function(f){return f.clientes&&f.clientes.indexOf(cid)>=0;}):funcionarios;
-    wrap.innerHTML='';
-    if(!funs.length) wrap.innerHTML='<em style="font-size:12px;color:var(--tx3)">Sin funcionarios asignados</em>';
-    else funs.forEach(function(f){
-      var lbl=document.createElement('label');
-      lbl.style.cssText='display:flex;align-items:center;gap:5px;font-size:12px;padding:4px 9px;background:var(--bg2);border-radius:var(--br);border:0.5px solid var(--bo);cursor:pointer';
-      var inp=document.createElement('input');
-      inp.type='checkbox'; inp.value=f.nombre; inp.style.accentColor='var(--blue)';
-      lbl.appendChild(inp); lbl.appendChild(document.createTextNode(' '+f.nombre));
-      wrap.appendChild(lbl);
-    });
+    if(cids.length===1){
+      var prevF=getSelFuns();
+      var funs=funcionarios.filter(function(f){return f.clientes&&f.clientes.indexOf(cids[0])>=0;});
+      wrap.innerHTML='';
+      if(!funs.length) wrap.innerHTML='<em style="font-size:12px;color:var(--tx3)">Sin funcionarios asignados</em>';
+      else funs.forEach(function(f){
+        var lbl=document.createElement('label');
+        lbl.style.cssText='display:flex;align-items:center;gap:5px;font-size:12px;padding:4px 9px;background:var(--bg2);border-radius:var(--br);border:0.5px solid var(--bo);cursor:pointer';
+        var inp=document.createElement('input');
+        inp.type='checkbox'; inp.value=f.nombre; inp.style.accentColor='var(--blue)'; if(prevF.indexOf(f.nombre)>=0)inp.checked=true;
+        lbl.appendChild(inp); lbl.appendChild(document.createTextNode(' '+f.nombre));
+        wrap.appendChild(lbl);
+      });
+    } else if(cids.length>1){
+      wrap.innerHTML='<em style="font-size:12px;color:var(--tx3)">Varios clientes: se crea sin funcionario (asignás después)</em>';
+    } else {
+      wrap.innerHTML='<em style="font-size:12px;color:var(--tx3)">Elegí un cliente para asignar funcionarios</em>';
+    }
   }
 }
 function rUC(){var cid=parseInt(document.getElementById('rcli').value)||null;var sel=document.getElementById('rcan');sel.innerHTML='<option value="">Todas</option>';var c=clientes.find(function(x){return x.id===cid;});if(c)c.canchas.forEach(function(ca){var o=document.createElement('option');o.value=canNombre(ca);o.textContent=canNombre(ca)+(canTipo(ca)==='sintetica'?' [S]':'');sel.appendChild(o);});renderReg();}
@@ -1082,7 +1120,8 @@ function render(){
   for(let i=0;i<7;i++){const d=aD(cMon,i),ds=fD(d);const hv=heladasData[ds]||'';h+=`<div class="rain-cell"><select onchange="setHelada('${ds}',this.value)" style="width:100%;font-size:10px;border:none;background:transparent;color:var(--tx);font-family:inherit"><option value=""${hv===''?' selected':''}> </option><option value="D"${hv==='D'?' selected':''}>D</option><option value="M"${hv==='M'?' selected':''}>M</option><option value="F"${hv==='F'?' selected':''}>F</option></select></div>`;}
   h+=`</div>`;
   const leg=clientes.map(c=>`<span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--tx2)"><span style="width:9px;height:9px;border-radius:2px;background:${c.bg};border:1px solid ${c.tx}"></span>${c.nombre}</span>`).join('');
-  h+=`<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px">${leg}</div>`;
+  // Leyenda de colores de clientes: AL PRINCIPIO (arriba de la vista semana).
+  h=`<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px">${leg}</div>`+h;
   var isCanchaView=typeof _calView!=='undefined'&&_calView==='cancha';
   var semanaEl=document.getElementById('tab-semana');
   if(!semanaEl)return;
@@ -2738,35 +2777,22 @@ function ONT(ir,taskId,prefillDate,prefillHour){
   document.getElementById('ndrow').style.display=ir?'':'none';
   if(taskId){
     var t=tasks.find(function(x){return x.id===taskId;});if(!t)return;
-    document.getElementById('ncli').value=t.cli;
-    setTimeout(function(){
-      document.getElementById('ncan').value=t.can;
-      // Update tarea list for this cancha
-      var nt=document.getElementById('ntar');
-      var tareas=tareasDeCancha(t.cli,t.can);
-      nt.innerHTML='';
-      tareas.forEach(function(ta){var o=document.createElement('option');o.textContent=ta;nt.appendChild(o);});
-      nt.value=t.tar;
-      // NOW call nUC with cancha+tarea already set so nmaq filters correctly
-      nUC();
-      setTimeout(function(){
-        document.getElementById('ncan').value=t.can;
-        nt.value=t.tar;
-        document.getElementById('nmaq').value=t.maq||'';
-        nUCmaq2();
-        var maq2row=document.getElementById('nmaq2-row');
-        var maq2sel=document.getElementById('nmaq2');
-        if(t.maq2&&maq2row&&maq2sel){maq2row.style.display='';maq2sel.value=t.maq2;}
-        document.getElementById('nfec').value=t.fec;
-        document.getElementById('ndes').value=t.des;
-        document.getElementById('nhas').value=t.has;
-        document.getElementById('nspc').value=t.spc||'';
-        var fns=tFuns(t);
-        document.querySelectorAll('#nfun-checks input').forEach(function(inp){
-          inp.checked=fns.indexOf(inp.value)>=0;
-        });
-      },80);
-    },80);
+    nBuildCli([t.cli]);
+    nUC(); // arma las canchas del cliente
+    var canInp=document.querySelector('#ncan-multi input[data-cli="'+t.cli+'"][value="'+String(t.can).replace(/"/g,'&quot;')+'"]');
+    if(canInp)canInp.checked=true;
+    nUCcan(); // repuebla tarea/máquina/funcionarios según esa cancha
+    document.getElementById('ntar').value=t.tar;
+    document.getElementById('nmaq').value=t.maq||'';
+    nUCmaq2();
+    var maq2row=document.getElementById('nmaq2-row'),maq2sel=document.getElementById('nmaq2');
+    if(t.maq2&&maq2row&&maq2sel){maq2row.style.display='';maq2sel.value=t.maq2;}
+    document.getElementById('nfec').value=t.fec;
+    document.getElementById('ndes').value=t.des;
+    document.getElementById('nhas').value=t.has;
+    document.getElementById('nspc').value=t.spc||'';
+    var fns=tFuns(t);
+    document.querySelectorAll('#nfun-checks input').forEach(function(inp){inp.checked=fns.indexOf(inp.value)>=0;});
   } else {
     // New task
     if(!ir){
@@ -2776,8 +2802,8 @@ function ONT(ir,taskId,prefillDate,prefillHour){
         document.getElementById('ndes').value=String(prefillHour).padStart(2,'0')+':00';
         document.getElementById('nhas').value=String(Math.min(23,prefillHour+1)).padStart(2,'0')+':00';
       }
-      // Reset selectors for fresh task
-      document.getElementById('ncli').value='';
+      // Reset selectores (multi): ningún cliente/cancha tildado
+      nBuildCli([]);
       nUC();
     }
     if(ir){
@@ -2803,9 +2829,13 @@ function SVT(){
   var ncanchasRecEl=document.getElementById('ncanchas-rec');
   var recEditIdCheck=(document.getElementById('mnew').dataset.recEditId||'');
   if(ncanchasRecEl&&!recEditIdCheck){isRec=ncanchasRecEl.checked;}
-  var cid=parseInt(document.getElementById('ncli').value);
-  if(!cid){alert('Selecciona un cliente');return;}
-  var funs=getSelFuns();
+  var _cids=ncliSel();
+  var _targets=ncanSel();  // [{cli,can}]
+  if(!_cids.length){alert('Selecciona al menos un cliente');return;}
+  if(!_targets.length){alert('Selecciona al menos una cancha');return;}
+  var cid=_cids[0];
+  // Con 2+ clientes se crea sin funcionario (igual criterio que la app campo)
+  var funs=_cids.length===1?getSelFuns():[];
   var des=document.getElementById('ndes').value;
   var has=document.getElementById('nhas').value;
   var fec=document.getElementById('nfec').value;
@@ -2818,7 +2848,7 @@ function SVT(){
   var maq2El=document.getElementById('nmaq2');
   var maq2Row=document.getElementById('nmaq2-row');
   var maq2=maq2El&&maq2Row&&maq2Row.style.display!=='none'?maq2El.value:'';
-  var base={cli:cid,can:document.getElementById('ncan').value,tar:document.getElementById('ntar').value,
+  var base={cli:cid,can:_targets[0].can,tar:document.getElementById('ntar').value,
     funs:funs,maq:document.getElementById('nmaq').value,maq2:maq2,des:des,has:has,spc:document.getElementById('nspc').value};
   var recEditId=parseInt(document.getElementById('mnew').dataset.recEditId||'');
   if(isRec&&recEditId){
@@ -2852,16 +2882,24 @@ function SVT(){
   if(isRec){
     var dias2=[...document.querySelectorAll('#ndp .dbt.sel')].map(function(b){return parseInt(b.dataset.d);});
     if(!dias2.length){alert('Selecciona al menos un dia');return;}
-    var isDup=recs.some(function(r){return r.cli===base.cli&&r.can===base.can&&r.tar===base.tar&&r.des===base.des&&r.has===base.has&&JSON.stringify(r.dias.slice().sort()+'')===JSON.stringify(dias2.slice().sort()+'');});
-    if(isDup){alert('Ya existe una recurrente identica.');return;}
     var hasta2=document.getElementById('nrec-hasta').value||new Date().getFullYear()+'-12-31';
     var maxDate=fD(aD(new Date(),365));if(hasta2>maxDate)hasta2=maxDate;
-    var _newRec2={id:nextRecId(),dias:dias2,hasta:hasta2,...base};recs.push(_newRec2);saveRecToSupabase(_newRec2);
+    // Una recurrente por cada cancha tildada (las que ya existen se saltean)
+    var createdR=0;
+    _targets.forEach(function(g){
+      var isDup=recs.some(function(r){return r.cli===g.cli&&r.can===g.can&&r.tar===base.tar&&r.des===base.des&&r.has===base.has&&JSON.stringify(r.dias.slice().sort()+'')===JSON.stringify(dias2.slice().sort()+'');});
+      if(isDup)return;
+      var _nr={id:nextRecId(),dias:dias2,hasta:hasta2,...base,cli:g.cli,can:g.can};
+      recs.push(_nr);saveRecToSupabase(_nr);createdR++;
+    });
+    if(!createdR){alert('Ya '+(_targets.length>1?'existen esas recurrentes.':'existe esa recurrente.'));return;}
     GRT();CM3('mnew');saveState();renderRec();ST('rec');
   } else {
-    var newTask={id:nextTaskId(),...base,fec:fec,est:'pendiente',obs:'',recId:null,chk:{},hsIni:null,hsFin:null,_dirty:true};
-    tasks.push(newTask);
-    saveTaskToSupabase(newTask);
+    // Una tarea por cada cancha tildada
+    _targets.forEach(function(g){
+      var nt2={id:nextTaskId(),...base,cli:g.cli,can:g.can,fec:fec,est:'pendiente',obs:'',recId:null,chk:{},hsIni:null,hsFin:null,_dirty:true};
+      tasks.push(nt2);saveTaskToSupabase(nt2);
+    });
     CM3('mnew');saveState();render();
   }
 }
@@ -3092,6 +3130,39 @@ function DEL(){
     saveStateLocal();
   }
 }
+async function delRecTaskDiaSemana(){
+  // Saca el día de la semana de ESTA tarea del patrón de la recurrente, dejando los otros días.
+  var modal=document.getElementById('mrec-del-task');
+  var tid=parseInt(modal.dataset.tid);
+  modal.dataset.tid='';
+  var t=tasks.find(function(x){return x.id===tid;});
+  if(t&&t.recId){
+    var rec=recs.find(function(r){return r.id===t.recId;});
+    var dow=new Date(t.fec+'T12:00').getDay();  // 0=domingo … 6=sábado
+    var hoy=fD(new Date());
+    if(rec){
+      // 1) Quitar ese día del patrón y persistir la recurrente
+      rec.dias=(rec.dias||[]).filter(function(d){return d!==dow;});
+      if(rec.dias.length===0){
+        // Si era el único día, la recurrente ya no tiene sentido → eliminarla entera
+        recs=recs.filter(function(r){return r.id!==rec.id;});
+        await fetch(SB_URL+'/rest/v1/recurrentes?id=eq.'+rec.id,{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).catch(function(e){console.warn(e);});
+      } else {
+        await saveRecToSupabase(rec);
+      }
+      // 2) Borrar en Supabase las tareas FUTURAS pendientes de ESE día de la semana, y esperar
+      try{
+        await fetch(SB_URL+'/rest/v1/tareas?rec_id=eq.'+rec.id+'&fec=gte.'+hoy+'&est=eq.pendiente',
+          {method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
+      }catch(e){console.warn('delRecTaskDiaSemana delete error',e);}
+      // De las borradas, solo las de ESE día de la semana no deben volver; las de otros días sí.
+      tasks=tasks.filter(function(x){return!(x.recId===rec.id&&x.fec>=hoy&&x.est==='pendiente');});
+      // 3) Regenerar: GRT recrea los otros días (el patrón ya no incluye 'dow')
+      GRT();
+    }
+  }
+  CM3('mrec-del-task');CM3('mdet');saveState();renderRec();render();
+}
 function delRecTaskSolo(){
   var modal=document.getElementById('mrec-del-task');
   var tid=parseInt(modal.dataset.tid);
@@ -3105,15 +3176,28 @@ function delRecTaskSolo(){
   }
   CM3('mrec-del-task');CM3('mdet');saveState();render();
 }
-function delRecTaskFuturas(){
+async function delRecTaskFuturas(){
+  // Termina la recurrente COMPLETA: borra sus tareas futuras pendientes y la recurrente. Persiste.
   var modal=document.getElementById('mrec-del-task');
   var tid=parseInt(modal.dataset.tid);
   modal.dataset.tid='';
   var t=tasks.find(function(x){return x.id===tid;});
-  if(t){
+  if(t&&t.recId){
+    var recId=t.recId;
     var hoy=fD(new Date());
-    tasks=tasks.filter(function(x){return!(x.recId===t.recId&&x.fec>=hoy&&x.est==='pendiente');});
-    recs=recs.filter(function(r){return r.id!==t.recId;});
+    // 1) Borrar tareas futuras pendientes en Supabase y esperar
+    try{
+      await fetch(SB_URL+'/rest/v1/tareas?rec_id=eq.'+recId+'&fec=gte.'+hoy+'&est=eq.pendiente',
+        {method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
+    }catch(e){console.warn('delRecTaskFuturas delete tareas error',e);}
+    // 2) Borrar la recurrente en Supabase
+    try{
+      await fetch(SB_URL+'/rest/v1/recurrentes?id=eq.'+recId,
+        {method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
+    }catch(e){console.warn('delRecTaskFuturas delete rec error',e);}
+    // 3) Reflejar en memoria
+    tasks=tasks.filter(function(x){return!(x.recId===recId&&x.fec>=hoy&&x.est==='pendiente');});
+    recs=recs.filter(function(r){return r.id!==recId;});
   }
   CM3('mrec-del-task');CM3('mdet');saveState();renderRec();render();
 }
@@ -3629,16 +3713,17 @@ function editRec(id){
   document.getElementById('mtitle').textContent='Editar recurrente';
   document.getElementById('nfecrow').style.display='none';
   document.getElementById('ndrow').style.display='';
-  document.getElementById('ncli').value=r.cli;nUC();
-  setTimeout(function(){
-    document.getElementById('ncan').value=r.can;document.getElementById('ntar').value=r.tar;
-    document.getElementById('nmaq').value=r.maq||'';document.getElementById('ndes').value=r.des;
-    document.getElementById('nhas').value=r.has;document.getElementById('nspc').value=r.spc||'';
-    document.querySelectorAll('#ndp .dbt').forEach(function(b){b.classList.toggle('sel',r.dias.includes(parseInt(b.dataset.d)));});
-    document.getElementById('nrec-hasta').value=r.hasta||'';
-    document.getElementById('mnew').dataset.recEditId=id;
-    var fns=tFuns(r);document.querySelectorAll('#nfun-checks input').forEach(function(inp){inp.checked=fns.indexOf(inp.value)>=0;});
-  },60);
+  nBuildCli([r.cli]);nUC();
+  var canInp=document.querySelector('#ncan-multi input[data-cli="'+r.cli+'"][value="'+String(r.can).replace(/"/g,'&quot;')+'"]');
+  if(canInp)canInp.checked=true;
+  nUCcan();
+  document.getElementById('ntar').value=r.tar;
+  document.getElementById('nmaq').value=r.maq||'';document.getElementById('ndes').value=r.des;
+  document.getElementById('nhas').value=r.has;document.getElementById('nspc').value=r.spc||'';
+  document.querySelectorAll('#ndp .dbt').forEach(function(b){b.classList.toggle('sel',r.dias.includes(parseInt(b.dataset.d)));});
+  document.getElementById('nrec-hasta').value=r.hasta||'';
+  document.getElementById('mnew').dataset.recEditId=id;
+  var fns=tFuns(r);document.querySelectorAll('#nfun-checks input').forEach(function(inp){inp.checked=fns.indexOf(inp.value)>=0;});
   document.getElementById('mnew').style.display='flex';
 }
 var _clDragIdx=null;
@@ -4206,11 +4291,15 @@ _mutatingFns.forEach(name => {
   <div style="display:flex;flex-direction:column;gap:8px">
     <button class="btn danger" onclick="delRecTaskSolo()" style="text-align:left;padding:12px 16px">
       <div style="font-weight:600">Solo esta instancia</div>
-      <div style="font-size:11px;font-weight:400;margin-top:2px;opacity:.8">Las demás semanas quedan igual</div>
+      <div style="font-size:11px;font-weight:400;margin-top:2px;opacity:.8">Las demás fechas quedan igual</div>
+    </button>
+    <button class="btn danger" onclick="delRecTaskDiaSemana()" style="text-align:left;padding:12px 16px">
+      <div style="font-weight:600">Este día en adelante</div>
+      <div style="font-size:11px;font-weight:400;margin-top:2px;opacity:.8">Deja de repetirse este día de la semana; los otros días siguen igual</div>
     </button>
     <button class="btn danger" onclick="delRecTaskFuturas()" style="text-align:left;padding:12px 16px">
-      <div style="font-weight:600">Esta y todas las futuras</div>
-      <div style="font-size:11px;font-weight:400;margin-top:2px;opacity:.8">Elimina la recurrente completa</div>
+      <div style="font-weight:600">Terminar toda la recurrente</div>
+      <div style="font-size:11px;font-weight:400;margin-top:2px;opacity:.8">Elimina la recurrente completa (todos los días, de hoy en adelante)</div>
     </button>
     <button class="btn" onclick="delRecTaskCancel()" style="padding:12px 16px;background:var(--bg2)">
       <div style="font-weight:600">Cancelar</div>
