@@ -2631,7 +2631,12 @@ function renderConsultaLluvia(ct){
   var list=getConsultaLluvia();
   if(!list.length){ct.innerHTML='<div class="empty">Sin registros de lluvia en este período</div>';return;}
   var total=list.reduce(function(a,x){return a+x.mm;},0);
-  var h='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">'+list.length+' día'+(list.length===1?'':'s')+' con lluvia · total '+total+' mm</div>';
+  var periodoLbl=_conVista==='anio'?('año '+_conYear):(MES[_conMonth]+' '+_conYear);
+  var h='<div style="background:linear-gradient(135deg,#185FA5,#2E7BC4);color:#fff;border-radius:var(--br);padding:16px 20px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">'
+    +'<div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;opacity:.85">Acumulado · '+periodoLbl+'</div>'
+    +'<div style="font-size:30px;font-weight:800;line-height:1.1;margin-top:2px">'+total+' mm</div></div>'
+    +'<div style="text-align:right;font-size:12px;opacity:.9"><i class="ti ti-cloud-rain" style="font-size:26px;display:block;margin-bottom:2px"></i>'+list.length+' día'+(list.length===1?'':'s')+' con lluvia</div>'
+    +'</div>';
   h+='<div style="display:flex;flex-direction:column;gap:6px">';
   list.forEach(function(r){
     var d=new Date(r.fec+'T12:00');
