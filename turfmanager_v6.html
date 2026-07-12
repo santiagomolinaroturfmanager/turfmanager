@@ -367,6 +367,10 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
     <div class="sec-head">
       <h2><i class="ti ti-list-search" style="vertical-align:-2px;margin-right:4px"></i>Consulta de tareas</h2>
       <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+        <div style="display:flex;border:0.5px solid var(--bo2);border-radius:var(--br);overflow:hidden">
+          <button id="cm-tareas" onclick="setConModo('tareas')" style="font-size:11px;padding:3px 12px;border:none;background:var(--blue);color:#fff;cursor:pointer;font-family:inherit">Tareas</button>
+          <button id="cm-lluvia" onclick="setConModo('lluvia')" style="font-size:11px;padding:3px 12px;border:none;background:var(--bg2);color:var(--tx2);cursor:pointer;font-family:inherit">🌧️ Lluvia</button>
+        </div>
         <button onclick="exportConsulta()" class="btn sm" style="display:flex;align-items:center;gap:5px"><i class="ti ti-file-spreadsheet"></i> Excel</button>
         <div style="display:flex;border:0.5px solid var(--bo2);border-radius:var(--br);overflow:hidden">
           <button id="cv-mes" onclick="setConVista('mes')" style="font-size:11px;padding:3px 12px;border:none;background:var(--bg2);color:var(--tx2);cursor:pointer;font-family:inherit">Mes</button>
@@ -375,7 +379,7 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
         <div class="wnav"><button onclick="conNav(-1)"><i class="ti ti-chevron-left"></i></button><span id="con-lbl" style="font-size:12px;color:var(--tx2);min-width:90px;text-align:center"></span><button onclick="conNav(1)"><i class="ti ti-chevron-right"></i></button></div>
       </div>
     </div>
-    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px;padding:12px;background:var(--bg2);border-radius:var(--br)">
+    <div id="con-filtros" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px;padding:12px;background:var(--bg2);border-radius:var(--br)">
       <div><label style="font-size:11px;color:var(--tx2);display:block;margin-bottom:3px">Cliente</label>
         <select id="con-cli" onchange="conOnCli()" style="font-size:13px;padding:6px 10px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg);color:var(--tx);font-family:inherit"></select></div>
       <div id="con-can-wrap"><label style="font-size:11px;color:var(--tx2);display:block;margin-bottom:3px">Cancha</label>
@@ -648,7 +652,7 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
     <p style="font-size:12px;color:var(--tx2);margin-bottom:12px">Se propaga a todas las canchas activas.</p>
     <div class="fg">
       <div class="fr"><label>Fecha</label><input type="date" id="rain-fec"></div>
-      <div class="fr"><label>Milímetros (mm)</label><input type="number" id="rain-mm" min="0" step="0.5"></div>
+      <div class="fr"><label>Milímetros (mm)</label><input type="number" id="rain-mm" min="0" step="1"></div>
     </div>
     <div class="ma"><button onclick="CM3('mrain')">Cancelar</button><button class="bp" onclick="SVRain()">Registrar</button></div>
     <div style="border-top:0.5px solid var(--bo);margin-top:14px;padding-top:12px">
@@ -1130,7 +1134,7 @@ function render(){
   });
   h+=`</div>`;
   h+=`<div class="rain-row"><div class="rain-lbl"><i class="ti ti-cloud-rain" style="font-size:10px"></i>mm</div>`;
-  for(let i=0;i<7;i++){const d=aD(cMon,i),ds=fD(d);const isAuto=rainSrc[ds]==='auto';const rv=lluviaData[ds]||'';h+=`<div class="rain-cell${isAuto?' rain-auto':''}"><input type="number" value="${rv}" placeholder="—" min="0" step="0.5" title="${isAuto?'Estimado de Carrasco — revisá con el pluviómetro':(rv!==''?'Valor manual':'')}" onchange="setRain('${ds}',this.value)">${isAuto?'<span class="rain-auto-dot" title="Automático de Carrasco">•</span>':''}</div>`;}
+  for(let i=0;i<7;i++){const d=aD(cMon,i),ds=fD(d);const isAuto=rainSrc[ds]==='auto';const rv=(lluviaData[ds]!==undefined&&lluviaData[ds]!=='')?Math.round(lluviaData[ds]):'';h+=`<div class="rain-cell${isAuto?' rain-auto':''}"><input type="number" value="${rv}" placeholder="—" min="0" step="1" title="${isAuto?'Estimado de Carrasco — revisá con el pluviómetro':(rv!==''?'Valor manual':'')}" onchange="setRain('${ds}',this.value)">${isAuto?'<span class="rain-auto-dot" title="Automático de Carrasco">•</span>':''}</div>`;}
   h+=`</div></div>`;
   // Heladas row
   h+=`<div class="rain-row"><div class="rain-lbl"><i class="ti ti-snowflake" style="font-size:10px"></i>Hel</div>`;
@@ -1173,7 +1177,7 @@ async function fetchCarrascoRange(desde){
       if(ds>hoy)continue;
       if(rainSrc[ds]==='manual'){manuales++;continue;}
       if(mm===null||mm===undefined)continue;
-      var val=Math.round(mm*10)/10;
+      var val=Math.round(mm);
       if(val>0){if(lluviaData[ds]!==val||rainSrc[ds]!=='auto'){lluviaData[ds]=val;rainSrc[ds]='auto';nuevos++;}}
       else{if(rainSrc[ds]==='auto'){delete lluviaData[ds];delete rainSrc[ds];nuevos++;}}
     }
@@ -1200,7 +1204,7 @@ async function fetchCarrascoRain(force){
       if(ds>hoy)continue;                 // no traer futuro
       if(rainSrc[ds]==='manual')continue; // nunca pisar lo que cargaste vos
       if(mm===null||mm===undefined)continue;
-      var val=Math.round(mm*10)/10;
+      var val=Math.round(mm);
       if(val>0){ if(lluviaData[ds]!==val||rainSrc[ds]!=='auto'){lluviaData[ds]=val;rainSrc[ds]='auto';nuevos++;} }
       else { if(rainSrc[ds]==='auto'){delete lluviaData[ds];delete rainSrc[ds];nuevos++;} }
     }
@@ -1218,7 +1222,7 @@ function showRainBanner(){
   b.style.display='flex';
   clearTimeout(window._rainBannerT);window._rainBannerT=setTimeout(function(){if(b&&b.parentNode)b.remove();},18000);
 }
-function setRain(fec,val){const v=parseFloat(val)||0;if(v>0){lluviaData[fec]=v;rainSrc[fec]='manual';}else{delete lluviaData[fec];delete rainSrc[fec];}saveStateLocal();saveWeatherToSupabase();render();}
+function setRain(fec,val){const v=Math.round(parseFloat(val)||0);if(v>0){lluviaData[fec]=v;rainSrc[fec]='manual';}else{delete lluviaData[fec];delete rainSrc[fec];}saveStateLocal();saveWeatherToSupabase();render();}
 var _weatherSaveTimer=null;
 function saveWeatherToSupabase(){
   // Debounce to avoid spamming on rapid edits
@@ -1234,7 +1238,7 @@ function saveWeatherToSupabase(){
 }
 function setHelada(ds,v){heladasData[ds]=v||null;if(!v)delete heladasData[ds];saveStateLocal();saveWeatherToSupabase();render();}
 function openRainModal(){document.getElementById('rain-fec').value=fD(new Date());document.getElementById('rain-mm').value='';document.getElementById('mrain').style.display='flex';}
-function SVRain(){const fec=document.getElementById('rain-fec').value;const mm=parseFloat(document.getElementById('rain-mm').value)||0;if(!fec)return;if(mm>0){lluviaData[fec]=mm;rainSrc[fec]='manual';}else{delete lluviaData[fec];delete rainSrc[fec];}saveStateLocal();saveWeatherToSupabase();CM3('mrain');render();}
+function SVRain(){const fec=document.getElementById('rain-fec').value;const mm=Math.round(parseFloat(document.getElementById('rain-mm').value)||0);if(!fec)return;if(mm>0){lluviaData[fec]=mm;rainSrc[fec]='manual';}else{delete lluviaData[fec];delete rainSrc[fec];}saveStateLocal();saveWeatherToSupabase();CM3('mrain');render();}
 var _holdTimer=null,_holdId=null;
 function chipHold(e,id){
   if(e.button!==undefined&&e.button!==0)return; // only left click
@@ -2244,7 +2248,7 @@ async function renderReg(){
   const planRows=getPlanRows(isSint);
   function grd(row){
     const data={};for(let d=1;d<=dim;d++)data[d]=null;
-    if(row.key==='_lluvia'){for(let d=1;d<=dim;d++){const ds=`${cYear}-${String(cMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;if(lluviaData[ds])data[d]=lluviaData[ds];}return data;}
+    if(row.key==='_lluvia'){for(let d=1;d<=dim;d++){const ds=`${cYear}-${String(cMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;if(lluviaData[ds])data[d]=Math.round(lluviaData[ds]);}return data;}
     if(row.key==='_heladas'){for(let d=1;d<=dim;d++){const ds=`${cYear}-${String(cMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;if(heladasData[ds])data[d]=heladasData[ds];}return data;}
     if(row.key==='_temp'){for(let d=1;d<=dim;d++){const ds=`${cYear}-${String(cMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;if(tempData[ds]!==undefined)data[d]=tempData[ds];}return data;}
     mt.forEach(t=>{
@@ -2384,7 +2388,7 @@ function exportRegExcel(){
   const rows=[header];
   planRows.forEach(row=>{
     const data={};for(let d=1;d<=dim;d++)data[d]=null;
-    if(row.key==='_lluvia'){for(let d=1;d<=dim;d++){const ds=`${cYear}-${String(cMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;if(lluviaData[ds])data[d]=lluviaData[ds];}}
+    if(row.key==='_lluvia'){for(let d=1;d<=dim;d++){const ds=`${cYear}-${String(cMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;if(lluviaData[ds])data[d]=Math.round(lluviaData[ds]);}}
     else if(row.key==='_temp'){for(let d=1;d<=dim;d++){const ds=`${cYear}-${String(cMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;if(tempData[ds]!==undefined)data[d]=tempData[ds];}}
     else mt.forEach(t=>{if(t.tar!==row.key)return;const day=new Date(t.fec+'T12:00').getDate();data[day]=(data[day]||0)+1;});
     const vals=Array.from({length:dim},(_,i)=>data[i+1]||'');
@@ -2447,6 +2451,31 @@ function exportResumen(){
 }
 // ════════ CONSULTA (listado detallado de tareas completadas) ════════
 var _conVista='anio';
+var _conModo='tareas';
+function setConModo(m){
+  _conModo=m;
+  var bt=document.getElementById('cm-tareas'),bl=document.getElementById('cm-lluvia');
+  bt.style.background=m==='tareas'?'var(--blue)':'var(--bg2)';bt.style.color=m==='tareas'?'#fff':'var(--tx2)';
+  bl.style.background=m==='lluvia'?'var(--blue)':'var(--bg2)';bl.style.color=m==='lluvia'?'#fff':'var(--tx2)';
+  var f=document.getElementById('con-filtros');if(f)f.style.display=m==='lluvia'?'none':'';
+  var h=document.querySelector('#tab-consulta .sec-head h2');if(h)h.innerHTML='<i class="ti ti-list-search" style="vertical-align:-2px;margin-right:4px"></i>'+(m==='lluvia'?'Consulta de lluvia':'Consulta de tareas');
+  renderConsulta();
+}
+// Días con lluvia registrada en el período (>0), ordenados más reciente primero
+function getConsultaLluvia(){
+  var isYear=_conVista==='anio';
+  var out=[];
+  Object.keys(lluviaData).forEach(function(ds){
+    var mm=Math.round(lluviaData[ds]||0);
+    if(mm<=0)return;
+    var d=new Date(ds+'T12:00');
+    if(isYear){if(d.getFullYear()!==_conYear)return;}
+    else{if(d.getMonth()!==_conMonth||d.getFullYear()!==_conYear)return;}
+    out.push({fec:ds,mm:mm,src:rainSrc[ds]||'manual'});
+  });
+  out.sort(function(a,b){return b.fec.localeCompare(a.fec);});
+  return out;
+}
 var _conYear=new Date().getFullYear();
 var _conMonth=new Date().getMonth();
 
@@ -2561,6 +2590,7 @@ function renderConsulta(){
   if(lbl)lbl.textContent=_conVista==='anio'?('Año '+_conYear):(MES[_conMonth]+' '+_conYear);
   var ct=document.getElementById('consulta-ct');
   if(!ct)return;
+  if(_conModo==='lluvia'){renderConsultaLluvia(ct);return;}
   var list=getConsultaTasks();
   if(!list.length){ct.innerHTML='<div class="empty">Sin tareas completadas con esos filtros</div>';return;}
   var h='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">'+list.length+' tarea'+(list.length===1?'':'s')+' completada'+(list.length===1?'':'s')+'</div>';
@@ -2597,7 +2627,36 @@ function splitSpc(spc){
   if(!spc)return[];
   return String(spc).split('+').map(function(s){return s.trim();}).filter(function(s){return s.length>0;});
 }
+function renderConsultaLluvia(ct){
+  var list=getConsultaLluvia();
+  if(!list.length){ct.innerHTML='<div class="empty">Sin registros de lluvia en este período</div>';return;}
+  var total=list.reduce(function(a,x){return a+x.mm;},0);
+  var h='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">'+list.length+' día'+(list.length===1?'':'s')+' con lluvia · total '+total+' mm</div>';
+  h+='<div style="display:flex;flex-direction:column;gap:6px">';
+  list.forEach(function(r){
+    var d=new Date(r.fec+'T12:00');
+    var fecStr=d.toLocaleDateString('es-UY',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+    var auto=r.src==='auto';
+    h+='<div style="display:flex;align-items:center;gap:12px;border:0.5px solid var(--bo);border-left:3px solid '+(auto?'#E8A838':'#185FA5')+';border-radius:var(--br);padding:9px 13px;background:var(--bg)">'
+      +'<div style="min-width:150px;font-size:13px;text-transform:capitalize">'+fecStr+'</div>'
+      +'<div style="font-size:16px;font-weight:700;color:'+(auto?'#B26B00':'#185FA5')+'">'+r.mm+' mm</div>'
+      +'<div style="font-size:11px;color:var(--tx3)">'+(auto?'estimado Carrasco':'manual (pluviómetro)')+'</div>'
+      +'</div>';
+  });
+  h+='</div>';
+  ct.innerHTML=h;
+}
 function exportConsulta(){
+  if(_conModo==='lluvia'){
+    var lr=getConsultaLluvia();
+    if(!lr.length){alert('No hay registros de lluvia para exportar');return;}
+    var per=_conVista==='anio'?('Anio_'+_conYear):(MES[_conMonth]+'_'+_conYear);
+    var rows=[['Fecha','Lluvia (mm)','Origen']];
+    lr.forEach(function(r){rows.push([r.fec,r.mm,r.src==='auto'?'Carrasco (estimado)':'Manual (pluviometro)']);});
+    if(window.XLSX){var ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:12},{wch:12},{wch:22}];var wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Lluvia');XLSX.writeFile(wb,'Lluvia_'+per+'.xlsx');}
+    else{var csv=rows.map(function(r){return r.map(function(v){return '"'+(v==null?'':v).toString().replace(/"/g,'""')+'"';}).join(',');}).join('\r\n');var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='Lluvia_'+per+'.csv';a.click();}
+    return;
+  }
   var list=getConsultaTasks();
   if(!list.length){alert('No hay tareas para exportar con esos filtros');return;}
   var periodo=_conVista==='anio'?('Anio_'+_conYear):(MES[_conMonth]+'_'+_conYear);
