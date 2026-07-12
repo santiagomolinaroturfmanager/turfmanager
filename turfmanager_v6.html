@@ -2,6 +2,9 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TurfManager</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
@@ -58,6 +61,9 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
 .rain-cell{border-right:0.5px solid var(--bo);padding:2px 3px;background:var(--bg)}.rain-cell:last-child{border-right:none}
 .rain-cell input{width:100%;border:none;background:transparent;font-size:10px;text-align:center;color:#185FA5;font-family:inherit;outline:none;padding:2px 0}
 .rain-cell input::placeholder{color:var(--tx3);font-size:9px}
+.rain-cell.rain-auto{position:relative;background:#FFF6E9}
+.rain-cell.rain-auto input{color:#B26B00;font-style:italic}
+.rain-auto-dot{position:absolute;top:0;right:2px;color:#E8A838;font-size:11px;line-height:1;pointer-events:none}
 /* FUNC */
 .func-sel-bar{background:var(--bg);border-bottom:0.5px solid var(--bo);padding:8px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .func-subtabs{display:flex;gap:2px;background:var(--bg2);border-radius:var(--br);padding:3px}
@@ -645,6 +651,15 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
       <div class="fr"><label>Milímetros (mm)</label><input type="number" id="rain-mm" min="0" step="0.5"></div>
     </div>
     <div class="ma"><button onclick="CM3('mrain')">Cancelar</button><button class="bp" onclick="SVRain()">Registrar</button></div>
+    <div style="border-top:0.5px solid var(--bo);margin-top:14px;padding-top:12px">
+      <label style="font-size:11px;color:var(--tx2);display:block;margin-bottom:5px">Traer lluvia histórica de Carrasco (rellena solo días sin valor manual)</label>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--tx2)">Desde</span>
+        <input type="date" id="rain-hist-desde" value="2026-01-01" style="font-size:12px">
+        <button class="btn sm" onclick="fetchCarrascoRange(document.getElementById('rain-hist-desde').value)"><i class="ti ti-cloud-download"></i> Traer histórico</button>
+      </div>
+      <div id="rain-hist-msg" style="font-size:11px;color:var(--tx3);margin-top:6px"></div>
+    </div>
   </div>
 </div>
 
@@ -725,6 +740,8 @@ let alertas=[
 let nxAlr=3;
 
 let lluviaData={};
+let rainSrc={};   // origen por fecha: 'auto' (Carrasco) | 'manual'
+var _rainFetched=false;
 let heladasData={};
 let tempData={}; // {YYYY-MM-DD: tempC}
 
@@ -1057,7 +1074,7 @@ function render(){
   document.getElementById('wlbl').textContent=cMon.toLocaleDateString('es-UY',op)+' – '+sun.toLocaleDateString('es-UY',op);
   const fil=gFilt();
   let h=`<div class="cal-wrap"><div class="cal-grid">`;
-  h+=`<div class="ch" style="display:flex;align-items:center;justify-content:flex-end;padding-right:5px"><button class="btn sm" onclick="openRainModal()" style="padding:2px 6px;font-size:10px" title="Registrar lluvia"><i class="ti ti-cloud-rain"></i></button></div>`;
+  h+=`<div class="ch" style="display:flex;align-items:center;justify-content:flex-end;gap:3px;padding-right:5px"><button class="btn sm" onclick="fetchCarrascoRain(true)" style="padding:2px 6px;font-size:10px" title="Actualizar lluvia desde Carrasco"><i class="ti ti-refresh"></i></button><button class="btn sm" onclick="openRainModal()" style="padding:2px 6px;font-size:10px" title="Registrar lluvia"><i class="ti ti-cloud-rain"></i></button></div>`;
   for(let i=0;i<7;i++){const d=aD(cMon,i);const isT=fD(d)===tod;h+=`<div class="ch"><div class="dn">${DIS[d.getDay()]}</div><div class="dnum${isT?' tod':''}">${d.getDate()}</div></div>`;}
   HNUM.forEach((hn,hi)=>{
     h+=`<div class="tl">${HRS[hi]}</div>`;
@@ -1113,7 +1130,7 @@ function render(){
   });
   h+=`</div>`;
   h+=`<div class="rain-row"><div class="rain-lbl"><i class="ti ti-cloud-rain" style="font-size:10px"></i>mm</div>`;
-  for(let i=0;i<7;i++){const d=aD(cMon,i),ds=fD(d);h+=`<div class="rain-cell"><input type="number" value="${lluviaData[ds]||''}" placeholder="—" min="0" step="0.5" onchange="setRain('${ds}',this.value)"></div>`;}
+  for(let i=0;i<7;i++){const d=aD(cMon,i),ds=fD(d);const isAuto=rainSrc[ds]==='auto';const rv=lluviaData[ds]||'';h+=`<div class="rain-cell${isAuto?' rain-auto':''}"><input type="number" value="${rv}" placeholder="—" min="0" step="0.5" title="${isAuto?'Estimado de Carrasco — revisá con el pluviómetro':(rv!==''?'Valor manual':'')}" onchange="setRain('${ds}',this.value)">${isAuto?'<span class="rain-auto-dot" title="Automático de Carrasco">•</span>':''}</div>`;}
   h+=`</div></div>`;
   // Heladas row
   h+=`<div class="rain-row"><div class="rain-lbl"><i class="ti ti-snowflake" style="font-size:10px"></i>Hel</div>`;
@@ -1132,7 +1149,76 @@ function render(){
     semanaEl.innerHTML=h;
   }
 }
-function setRain(fec,val){const v=parseFloat(val)||0;if(v>0)lluviaData[fec]=v;else delete lluviaData[fec];saveStateLocal();saveWeatherToSupabase();}
+// Trae la precipitación diaria estimada de la estación de Carrasco (Open-Meteo, sin API key).
+// Rellena solo las fechas que NO cargaste manualmente; las manuales nunca se pisan.
+// Trae lluvia histórica de Carrasco para un rango [desde .. hoy] (endpoint de archivo).
+// Rellena solo fechas sin valor manual; nunca pisa lo cargado a mano.
+async function fetchCarrascoRange(desde){
+  var msg=document.getElementById('rain-hist-msg');
+  if(!desde){if(msg)msg.textContent='Elegí una fecha de inicio.';return;}
+  var hoy=fD(new Date());
+  if(desde>hoy){if(msg)msg.textContent='La fecha no puede ser futura.';return;}
+  if(msg){msg.style.color='var(--tx3)';msg.textContent='Trayendo datos de Carrasco…';}
+  try{
+    // El archivo (ERA5) tiene ~5 días de atraso; los días recientes ya los cubre el fetch automático.
+    var url='https://archive-api.open-meteo.com/v1/archive?latitude=-34.838&longitude=-56.030&start_date='+desde+'&end_date='+hoy+'&daily=precipitation_sum&timezone=America%2FMontevideo';
+    var r=await fetch(url);
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    var j=await r.json();
+    var t=j&&j.daily&&j.daily.time, p=j&&j.daily&&j.daily.precipitation_sum;
+    if(!t||!p){if(msg){msg.style.color='var(--red)';msg.textContent='No se recibieron datos.';}return;}
+    var nuevos=0,manuales=0;
+    for(var i=0;i<t.length;i++){
+      var ds=t[i],mm=p[i];
+      if(ds>hoy)continue;
+      if(rainSrc[ds]==='manual'){manuales++;continue;}
+      if(mm===null||mm===undefined)continue;
+      var val=Math.round(mm*10)/10;
+      if(val>0){if(lluviaData[ds]!==val||rainSrc[ds]!=='auto'){lluviaData[ds]=val;rainSrc[ds]='auto';nuevos++;}}
+      else{if(rainSrc[ds]==='auto'){delete lluviaData[ds];delete rainSrc[ds];nuevos++;}}
+    }
+    if(nuevos>0){saveStateLocal();saveWeatherToSupabase();render();}
+    if(msg){msg.style.color='#639922';msg.textContent='Listo: '+nuevos+' día(s) cargado(s)'+(manuales?' · '+manuales+' día(s) manual(es) respetado(s)':'')+'. Revisá y ajustá con tus pluviómetros.';}
+  }catch(e){
+    console.warn('fetchCarrascoRange error',e);
+    if(msg){msg.style.color='var(--red)';msg.textContent='No se pudo traer el histórico (revisá la conexión).';}
+  }
+}
+async function fetchCarrascoRain(force){
+  if(_rainFetched&&!force)return;
+  _rainFetched=true;
+  try{
+    var url='https://api.open-meteo.com/v1/forecast?latitude=-34.838&longitude=-56.030&daily=precipitation_sum&timezone=America%2FMontevideo&past_days=14&forecast_days=1';
+    var r=await fetch(url);
+    if(!r.ok)return;
+    var j=await r.json();
+    var t=j&&j.daily&&j.daily.time, p=j&&j.daily&&j.daily.precipitation_sum;
+    if(!t||!p)return;
+    var nuevos=0, hoy=fD(new Date());
+    for(var i=0;i<t.length;i++){
+      var ds=t[i], mm=p[i];
+      if(ds>hoy)continue;                 // no traer futuro
+      if(rainSrc[ds]==='manual')continue; // nunca pisar lo que cargaste vos
+      if(mm===null||mm===undefined)continue;
+      var val=Math.round(mm*10)/10;
+      if(val>0){ if(lluviaData[ds]!==val||rainSrc[ds]!=='auto'){lluviaData[ds]=val;rainSrc[ds]='auto';nuevos++;} }
+      else { if(rainSrc[ds]==='auto'){delete lluviaData[ds];delete rainSrc[ds];nuevos++;} }
+    }
+    if(nuevos>0){
+      saveStateLocal();saveWeatherToSupabase();
+      if(cTab==='semana'||cTab==='reg')render();
+      showRainBanner();
+    }
+  }catch(e){console.warn('fetchCarrascoRain error',e);}
+}
+function showRainBanner(){
+  var b=document.getElementById('rain-banner');
+  if(!b){b=document.createElement('div');b.id='rain-banner';b.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:400;background:#185FA5;color:#fff;padding:10px 16px;border-radius:10px;box-shadow:0 4px 14px rgba(0,0,0,.25);font-size:13px;display:flex;align-items:center;gap:12px;max-width:92vw';document.body.appendChild(b);}
+  b.innerHTML='<i class="ti ti-cloud-rain"></i> Se cargó la lluvia estimada de Carrasco. Revisá y ajustá con tus pluviómetros. <button onclick="this.parentNode.remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:6px;padding:3px 9px;cursor:pointer;font-family:inherit">OK</button>';
+  b.style.display='flex';
+  clearTimeout(window._rainBannerT);window._rainBannerT=setTimeout(function(){if(b&&b.parentNode)b.remove();},18000);
+}
+function setRain(fec,val){const v=parseFloat(val)||0;if(v>0){lluviaData[fec]=v;rainSrc[fec]='manual';}else{delete lluviaData[fec];delete rainSrc[fec];}saveStateLocal();saveWeatherToSupabase();render();}
 var _weatherSaveTimer=null;
 function saveWeatherToSupabase(){
   // Debounce to avoid spamming on rapid edits
@@ -1140,6 +1226,7 @@ function saveWeatherToSupabase(){
   _weatherSaveTimer=setTimeout(function(){
     sbUpsert('configuracion',[
       {clave:'lluvia_data',valor:lluviaData},
+      {clave:'lluvia_src',valor:rainSrc},
       {clave:'heladas_data',valor:heladasData},
       {clave:'temp_data',valor:tempData}
     ]).catch(function(e){console.warn('saveWeather error',e);});
@@ -1147,7 +1234,7 @@ function saveWeatherToSupabase(){
 }
 function setHelada(ds,v){heladasData[ds]=v||null;if(!v)delete heladasData[ds];saveStateLocal();saveWeatherToSupabase();render();}
 function openRainModal(){document.getElementById('rain-fec').value=fD(new Date());document.getElementById('rain-mm').value='';document.getElementById('mrain').style.display='flex';}
-function SVRain(){const fec=document.getElementById('rain-fec').value;const mm=parseFloat(document.getElementById('rain-mm').value)||0;if(!fec)return;if(mm>0)lluviaData[fec]=mm;else delete lluviaData[fec];CM3('mrain');render();}
+function SVRain(){const fec=document.getElementById('rain-fec').value;const mm=parseFloat(document.getElementById('rain-mm').value)||0;if(!fec)return;if(mm>0){lluviaData[fec]=mm;rainSrc[fec]='manual';}else{delete lluviaData[fec];delete rainSrc[fec];}saveStateLocal();saveWeatherToSupabase();CM3('mrain');render();}
 var _holdTimer=null,_holdId=null;
 function chipHold(e,id){
   if(e.button!==undefined&&e.button!==0)return; // only left click
@@ -2885,22 +2972,41 @@ function SVT(){
     var hasta2=document.getElementById('nrec-hasta').value||new Date().getFullYear()+'-12-31';
     var maxDate=fD(aD(new Date(),365));if(hasta2>maxDate)hasta2=maxDate;
     // Una recurrente por cada cancha tildada (las que ya existen se saltean)
-    var createdR=0;
+    var createdR=0;var recRows=[];
     _targets.forEach(function(g){
       var isDup=recs.some(function(r){return r.cli===g.cli&&r.can===g.can&&r.tar===base.tar&&r.des===base.des&&r.has===base.has&&JSON.stringify(r.dias.slice().sort()+'')===JSON.stringify(dias2.slice().sort()+'');});
       if(isDup)return;
       var _nr={id:nextRecId(),dias:dias2,hasta:hasta2,...base,cli:g.cli,can:g.can};
-      recs.push(_nr);saveRecToSupabase(_nr);createdR++;
+      recs.push(_nr);recRows.push(recRow(_nr));createdR++;
     });
     if(!createdR){alert('Ya '+(_targets.length>1?'existen esas recurrentes.':'existe esa recurrente.'));return;}
-    GRT();CM3('mnew');saveState();renderRec();ST('rec');
+    CM3('mnew');saveState();renderRec();ST('rec');
+    // Guardar las recurrentes en un solo lote y ESPERAR antes de generar las tareas
+    sbUpsert('recurrentes',recRows).then(function(){GRT();render();renderRec();}).catch(function(e){console.warn('save multi recs error',e);alert('Atención: hubo un problema guardando las recurrentes. Revisá la conexión y recargá.');});
   } else {
-    // Una tarea por cada cancha tildada
+    // Aviso de duplicado: ¿ya existe una tarea igual (cliente+cancha+tarea+fecha)?
+    var dups=_targets.filter(function(g){return tasks.some(function(t){return t.cli===g.cli&&t.can===g.can&&t.tar===base.tar&&t.fec===fec&&t.est!=='cancelada';});});
+    if(dups.length){
+      var lst=dups.slice(0,6).map(function(d){return '• '+cN(d.cli)+' · '+d.can;}).join('\n');
+      if(!confirm('Ya '+(dups.length>1?'existen '+dups.length+' tareas de "'+base.tar+'"':'existe una tarea de "'+base.tar+'"')+' para el '+fec+':\n'+lst+(dups.length>6?'\n…y más':'')+'\n\n¿Crear de todos modos?'))return;
+    }
+    // Una tarea por cada cancha tildada, en horas CONSECUTIVAS por cliente.
+    // La primera de cada cliente arranca en la hora elegida; las siguientes encadenan +duración.
+    var dur=Math.max(1,Math.round(hDiff(base.des,base.has)))||1;
+    var horaBase=parseInt((base.des||'08:00').split(':')[0])||8;
+    var contadorCli={};
+    var nuevas=[];
     _targets.forEach(function(g){
-      var nt2={id:nextTaskId(),...base,cli:g.cli,can:g.can,fec:fec,est:'pendiente',obs:'',recId:null,chk:{},hsIni:null,hsFin:null,_dirty:true};
-      tasks.push(nt2);saveTaskToSupabase(nt2);
+      var i=contadorCli[g.cli]||0;contadorCli[g.cli]=i+1;
+      var h1=horaBase+i*dur, h2=Math.min(23,h1+dur);
+      var des2=String(Math.min(23,h1)).padStart(2,'0')+':00';
+      var has2=String(h2).padStart(2,'0')+':00';
+      nuevas.push({id:nextTaskId(),...base,cli:g.cli,can:g.can,fec:fec,des:des2,has:has2,est:'pendiente',obs:'',recId:null,chk:{},hsIni:null,hsFin:null,_dirty:true});
     });
+    nuevas.forEach(function(t){tasks.push(t);});
     CM3('mnew');saveState();render();
+    // Guardado en UN SOLO lote (evita que un guardado suelto falle y se pierda una tarea)
+    sbUpsert('tareas',nuevas.map(taskRow)).catch(function(e){console.warn('save multi tareas error',e);alert('Atención: hubo un problema guardando '+nuevas.length+' tarea(s) en la base. Revisá la conexión y recargá para confirmar cuáles quedaron.');});
   }
 }
 function nextRecId(){
@@ -3097,17 +3203,21 @@ function skipRecFecha(recId,fecha){
   r.skip=r.skip||[];
   if(r.skip.indexOf(fecha)<0){r.skip.push(fecha);saveRecToSupabase(r);}
 }
+function recRow(r){
+  return {id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias,hasta:r.hasta,skip:r.skip||[],chk:r.chk||{}};
+}
 function saveRecToSupabase(r){
   if(!r)return;
-  var row={id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias,hasta:r.hasta,skip:r.skip||[],chk:r.chk||{}};
-  return sbUpsert('recurrentes',[row]).catch(function(e){console.warn('saveRecToSupabase error',e);});
+  return sbUpsert('recurrentes',[recRow(r)]).catch(function(e){console.warn('saveRecToSupabase error',e);});
+}
+function taskRow(t){
+  return {id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',
+    fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',
+    rec_id:t.recId||null,chk:t.chk||{},hs_ini:t.hsIni||null,hs_fin:t.hsFin||null,comp_por:t.compPor||null};
 }
 function saveTaskToSupabase(t){
   if(!t)return;
-  var row={id:t.id,cli:t.cli,can:t.can,tar:t.tar,funs:t.funs||[],maq:t.maq||'',maq2:t.maq2||'',
-    fec:t.fec,des:t.des,has:t.has,spc:t.spc||'',est:t.est,obs:t.obs||'',
-    rec_id:t.recId||null,chk:t.chk||{},hs_ini:t.hsIni||null,hs_fin:t.hsFin||null,comp_por:t.compPor||null};
-  return sbUpsert('tareas',[row]).catch(function(e){console.warn('saveTaskToSupabase error',e);});
+  return sbUpsert('tareas',[taskRow(t)]).catch(function(e){console.warn('saveTaskToSupabase error',e);});
 }
 function DEL(){
   var t=tasks.find(function(x){return x.id===selId;});if(!t)return;
@@ -3892,6 +4002,7 @@ async function syncConfig(){
     {clave:'svc_tareas',valor:SVC_TAREAS},
     {clave:'checklists',valor:checklists},
     {clave:'lluvia_data',valor:lluviaData},
+      {clave:'lluvia_src',valor:rainSrc},
     {clave:'heladas_data',valor:heladasData},
     {clave:'temp_data',valor:tempData}
   ]);
@@ -3912,6 +4023,7 @@ function loadStateLocal(){
     if(s.maquinas)maquinas=s.maquinas;
     if(s.alertas)alertas=s.alertas;
     if(s.lluviaData)lluviaData=s.lluviaData;
+    if(s.rainSrc)rainSrc=s.rainSrc;
     if(s.tempData)tempData=s.tempData;
     if(s.tasks)tasks=s.tasks;
     if(s.recs)recs=s.recs;
@@ -3930,7 +4042,7 @@ function loadStateLocal(){
 function loadState(){return loadStateLocal();}
 function saveStateLocal(){
   try{
-    const state={clientes,funcionarios,tiposTarea,tiposTareaSint,tiposMaquina,SVC_TAREAS,checklists,maquinas,alertas,lluviaData,heladasData,tempData,tasks,recs,novs,nxCli,nxFun,nxMaq,nxAlr,nxId,nxRec,nxNov,planRowOrder,savedAt:new Date().toISOString()};
+    const state={clientes,funcionarios,tiposTarea,tiposTareaSint,tiposMaquina,SVC_TAREAS,checklists,maquinas,alertas,lluviaData,rainSrc,heladasData,tempData,tasks,recs,novs,nxCli,nxFun,nxMaq,nxAlr,nxId,nxRec,nxNov,planRowOrder,savedAt:new Date().toISOString()};
     localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
   }catch(e){console.warn('saveStateLocal error',e);}
 }
@@ -3968,6 +4080,7 @@ async function loadFromSupabase(){
       if(c.clave==='svc_tareas')SVC_TAREAS=c.valor;
       if(c.clave==='checklists')checklists=c.valor;
       if(c.clave==='lluvia_data'&&c.valor)lluviaData=c.valor;
+      if(c.clave==='lluvia_src'&&c.valor)rainSrc=c.valor;
       if(c.clave==='heladas_data'&&c.valor)heladasData=c.valor;
       if(c.clave==='temp_data'&&c.valor)tempData=c.valor;
     });
@@ -4065,6 +4178,7 @@ function init(){
 UNB();updateAlrBadge();
 if(navigator.onLine){
   loadFromSupabase().then(function(ok){
+    fetchCarrascoRain();
     if(ok){GRT();render();rebuildSelects();UNB();updateAlrBadge();}
   });
 } else {
