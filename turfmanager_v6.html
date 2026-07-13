@@ -1103,7 +1103,8 @@ function render(){
         var chipOnclick=_selectMode?('toggleTaskSelect('+t.id+',event)'):('OD('+t.id+')');
         var selOutline=(_selectMode&&_selectedTasks[t.id])?';outline:3px solid var(--blue)':'';
         h+='<div class="chip st-'+t.est+'" id="chip-'+t.id+'" style="background:'+bg+';color:'+tx+cflStyle+selOutline+'"'+(_selectMode?'':dragAttr)+' onclick="'+chipOnclick+'">';
-        h+='<b>'+t.tar+' - '+t.can+'</b>';
+        var canOMaq=(t.tar==='Mant. Maquinaria')?(t.maq?(t.maq+(t.maq2?' + '+t.maq2:'')):'Maquinaria'):t.can;
+        h+='<b>'+t.tar+' - '+canOMaq+'</b>';
         // Segunda línea de la tarjeta: Cliente - Horario programado (sin máquina).
         var f24=function(x){if(!x)return x;var p=x.split(':');return String(parseInt(p[0])).padStart(2,'0')+':'+(p[1]||'00');};
         var horario=f24(t.des)+(t.has?' - '+f24(t.has):'');
@@ -3105,18 +3106,43 @@ function nextTaskId(){
   if(webIsEncargado&&nxId<1000000){nxId=Math.max(nxId,1000000+Math.floor(Math.random()*1000000));}
   return nxId++;
 }
+async function dedupeTasks(){
+  // Limpieza de duplicados: deja UNA tarea por (recurrente+fecha) o por (slot normal idéntico).
+  // Solo toca PENDIENTES (no toca completadas/canceladas/en curso). Conserva la que tiene funcionario.
+  var seen={};var toDelete=[];
+  var pend=tasks.filter(function(t){return t.est==='pendiente';});
+  pend.sort(function(a,b){
+    var af=(tFuns(a).length>0)?0:1, bf=(tFuns(b).length>0)?0:1;   // con funcionario primero (se conserva)
+    if(af!==bf)return af-bf;
+    return (a.id||0)-(b.id||0);
+  });
+  pend.forEach(function(t){
+    var k=(t.recId!=null)?('R'+t.recId+'|'+t.fec):('N'+t.cli+'|'+t.can+'|'+t.tar+'|'+t.fec+'|'+t.des);
+    if(seen[k])toDelete.push(t.id);else seen[k]=true;
+  });
+  if(!toDelete.length)return 0;
+  var delSet={};toDelete.forEach(function(id){delSet[id]=true;});
+  tasks=tasks.filter(function(t){return !delSet[t.id];});
+  await Promise.all(toDelete.map(function(id){
+    return fetch(SB_URL+'/rest/v1/tareas?id=eq.'+id,{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).catch(function(e){console.warn('dedupe del',e);});
+  }));
+  console.log('dedupeTasks: eliminadas '+toDelete.length+' tareas duplicadas');
+  return toDelete.length;
+}
 function GRT(){
   const tod=new Date();tod.setHours(0,0,0,0);
   var newTasks=[];
   // Build a Set of existing task keys (cli|can|tar|fec|des) for O(1) dedup lookup
   var existingKeys={};
   var cancelledKeys={};
+  var recDateKeys={};   // recId|fec : una recurrente genera como máximo UNA tarea por fecha
   tasks.forEach(function(t){
     var key=t.cli+'|'+t.can+'|'+t.tar+'|'+t.fec+'|'+t.des;
     existingKeys[key]=true;
     // Also track cancelled/done by cli+can+tar+fec (any des) to respect skips
     var keyNoDies=t.cli+'|'+t.can+'|'+t.tar+'|'+t.fec;
     if(t.est==='cancelada'||t.est==='completada'||t.est==='en_curso')cancelledKeys[keyNoDies]=true;
+    if(t.recId!=null&&t.fec)recDateKeys[t.recId+'|'+t.fec]=true;
   });
   recs.forEach(function(r){
     var hastaDate=new Date(r.hasta+'T23:59:00');var weekStart=gMon(tod);var sc=0;
@@ -3130,10 +3156,13 @@ function GRT(){
         if(skipSet[ds])return;
         var keyNoDies=r.cli+'|'+r.can+'|'+r.tar+'|'+ds;
         if(cancelledKeys[keyNoDies])return;
+        // Ya existe una tarea de ESTA recurrente en ESTA fecha (sin importar la hora) → no duplicar
+        if(recDateKeys[r.id+'|'+ds])return;
         var key=r.cli+'|'+r.can+'|'+r.tar+'|'+ds+'|'+r.des;
         if(existingKeys[key])return;
         // Mark as existing NOW so we never create it twice in this same run
         existingKeys[key]=true;
+        recDateKeys[r.id+'|'+ds]=true;
         // Copy checklist template from recurrente (reset all to false)
         var chkTemplate={};
         if(r.chk&&typeof r.chk==='object'){Object.keys(r.chk).forEach(function(k){chkTemplate[k]=false;});}
@@ -4269,9 +4298,9 @@ rebuildSelects();
 function init(){
 UNB();updateAlrBadge();
 if(navigator.onLine){
-  loadFromSupabase().then(function(ok){
+  loadFromSupabase().then(async function(ok){
     fetchCarrascoRain();
-    if(ok){GRT();render();rebuildSelects();UNB();updateAlrBadge();}
+    if(ok){await dedupeTasks();GRT();render();rebuildSelects();UNB();updateAlrBadge();}
   });
 } else {
   setSBStatus(false);
