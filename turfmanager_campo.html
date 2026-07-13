@@ -975,6 +975,9 @@ function renderTaskCard(t){
     } else {
       body+='<div class="done-row"><i class="ti ti-circle-check-filled"></i> Tarea completada'+(t.compPor?' por '+t.compPor:'')+'</div>';
     }
+    if(isAdmin||isEncargado){
+      body+='<button onclick="elimTareaCampo('+t.id+')" style="width:100%;margin-top:10px;padding:11px;border-radius:var(--br);border:1px solid var(--red);background:none;color:var(--red);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px"><i class="ti ti-trash"></i> Eliminar tarea</button>';
+    }
     body+='</div>';
   }
 
@@ -1039,6 +1042,25 @@ function skipRecFecha(recId,fecha){
   if(!r)return;
   r.skip=r.skip||[];
   if(r.skip.indexOf(fecha)<0){r.skip.push(fecha);saveRecCampo(r);}
+}
+function elimTareaCampo(id){
+  if(!(isAdmin||isEncargado))return;
+  var t=tasks.find(function(x){return x.id===id;});if(!t)return;
+  if(t.recId){
+    // Recurrente: cancelar SOLO esta fecha (tombstone) para que GRT no la regenere.
+    if(!confirm('Es una tarea recurrente.\n¿Eliminar SOLO esta fecha ('+t.fec+')?\nLas demás fechas quedan igual.'))return;
+    t.est='cancelada';
+    t.recId=null;
+    saveTaskCampo(t);
+  } else {
+    if(!confirm('¿Eliminar esta tarea?\n'+t.tar+' · '+cN(t.cli)+' · '+t.can+'\nEsta acción no se puede deshacer.'))return;
+    tasks=tasks.filter(function(x){return x.id!==id;});
+    fetch(SB_URL+'/rest/v1/tareas?id=eq.'+id,{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).catch(function(e){console.warn('elimTareaCampo',e);});
+  }
+  openCards[id]=false;
+  showSaveStatus('✓ Tarea eliminada',true);
+  setTimeout(hideSaveStatus,2500);
+  render();
 }
 function cambiarFecha(id, newFec){
   var t=tasks.find(function(x){return x.id===id;});if(!t)return;

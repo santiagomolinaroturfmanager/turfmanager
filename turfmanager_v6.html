@@ -962,6 +962,14 @@ function rebuildSelects(){
 function ncliSel(){return [...document.querySelectorAll('#ncli-multi input:checked')].map(function(i){return parseInt(i.value);});}
 function ncanSel(){return [...document.querySelectorAll('#ncan-multi input:checked')].map(function(i){return {cli:parseInt(i.dataset.cli),can:i.value};});}
 // Arma los chips checkbox de cliente (preChecked = array de ids a tildar)
+function ntLockSel(lock){
+  // Editar = una sola tarea: bloquea cambiar cliente/cancha (Opción A)
+  document.querySelectorAll('#ncli-multi input, #ncan-multi input').forEach(function(i){
+    i.disabled=lock;
+    var lbl=i.closest('label')||i.parentNode;
+    if(lbl){lbl.style.cursor=lock?'not-allowed':'pointer';lbl.style.opacity=(lock&&!i.checked)?'.4':'1';}
+  });
+}
 function nBuildCli(preChecked){
   var wrap=document.getElementById('ncli-multi');if(!wrap)return;
   var list=(typeof webIsEncargado!=='undefined'&&webIsEncargado)?clientes.filter(function(c){return webClientes.indexOf(c.id)>=0;}):clientes;
@@ -2944,6 +2952,7 @@ function ONT(ir,taskId,prefillDate,prefillHour){
     document.getElementById('nspc').value=t.spc||'';
     var fns=tFuns(t);
     document.querySelectorAll('#nfun-checks input').forEach(function(inp){inp.checked=fns.indexOf(inp.value)>=0;});
+    ntLockSel(true); // no permitir agregar canchas ni cambiar cliente al editar
   } else {
     // New task
     if(!ir){
@@ -2956,6 +2965,7 @@ function ONT(ir,taskId,prefillDate,prefillHour){
       // Reset selectores (multi): ningún cliente/cancha tildado
       nBuildCli([]);
       nUC();
+      ntLockSel(false);
     }
     if(ir){
       var y=new Date().getFullYear();
@@ -3068,9 +3078,15 @@ function SVT(){
       nuevas.push({id:nextTaskId(),...base,cli:g.cli,can:g.can,fec:fec,des:des2,has:has2,est:'pendiente',obs:'',recId:null,chk:{},hsIni:null,hsFin:null,_dirty:true});
     });
     nuevas.forEach(function(t){tasks.push(t);});
-    CM3('mnew');saveState();render();
-    // Guardado en UN SOLO lote (evita que un guardado suelto falle y se pierda una tarea)
-    sbUpsert('tareas',nuevas.map(taskRow)).catch(function(e){console.warn('save multi tareas error',e);alert('Atención: hubo un problema guardando '+nuevas.length+' tarea(s) en la base. Revisá la conexión y recargá para confirmar cuáles quedaron.');});
+    saveState();render();
+    // Guardado en UN SOLO lote. Cerramos el modal RECIÉN cuando terminó de guardarse,
+    // para que no se pierdan tareas si el usuario recarga enseguida.
+    sbUpsert('tareas',nuevas.map(taskRow)).then(function(){
+      CM3('mnew');
+    }).catch(function(e){
+      console.warn('save multi tareas error',e);
+      alert('Atención: hubo un problema guardando '+nuevas.length+' tarea(s) en la base. Revisá la conexión. Las tareas siguen en pantalla; volvé a intentar guardar o recargá para ver cuáles quedaron.');
+    });
   }
 }
 function nextRecId(){
@@ -3305,36 +3321,41 @@ function DEL(){
   }
 }
 async function delRecTaskDiaSemana(){
-  // Saca el día de la semana de ESTA tarea del patrón de la recurrente, dejando los otros días.
+  // Saca ese día de la semana del patrón y borra SOLO las instancias futuras de ese día.
   var modal=document.getElementById('mrec-del-task');
   var tid=parseInt(modal.dataset.tid);
   modal.dataset.tid='';
   var t=tasks.find(function(x){return x.id===tid;});
-  if(t&&t.recId){
-    var rec=recs.find(function(r){return r.id===t.recId;});
-    var dow=new Date(t.fec+'T12:00').getDay();  // 0=domingo … 6=sábado
-    var hoy=fD(new Date());
-    if(rec){
-      // 1) Quitar ese día del patrón y persistir la recurrente
-      rec.dias=(rec.dias||[]).filter(function(d){return d!==dow;});
-      if(rec.dias.length===0){
-        // Si era el único día, la recurrente ya no tiene sentido → eliminarla entera
-        recs=recs.filter(function(r){return r.id!==rec.id;});
-        await fetch(SB_URL+'/rest/v1/recurrentes?id=eq.'+rec.id,{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).catch(function(e){console.warn(e);});
-      } else {
-        await saveRecToSupabase(rec);
-      }
-      // 2) Borrar en Supabase las tareas FUTURAS pendientes de ESE día de la semana, y esperar
-      try{
-        await fetch(SB_URL+'/rest/v1/tareas?rec_id=eq.'+rec.id+'&fec=gte.'+hoy+'&est=eq.pendiente',
-          {method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
-      }catch(e){console.warn('delRecTaskDiaSemana delete error',e);}
-      // De las borradas, solo las de ESE día de la semana no deben volver; las de otros días sí.
-      tasks=tasks.filter(function(x){return!(x.recId===rec.id&&x.fec>=hoy&&x.est==='pendiente');});
-      // 3) Regenerar: GRT recrea los otros días (el patrón ya no incluye 'dow')
-      GRT();
+  if(!t){CM3('mrec-del-task');CM3('mdet');render();return;}
+  var dow=new Date(t.fec+'T12:00').getDay();   // 0=domingo … 6=sábado
+  var hoy=fD(new Date());
+  var recId=t.recId;
+  // 1) Sacar ese día del patrón de la recurrente (si existe) y persistir
+  var rec=recId?recs.find(function(r){return r.id===recId;}):null;
+  if(rec){
+    rec.dias=(rec.dias||[]).filter(function(d){return d!==dow;});
+    if(rec.dias.length===0){
+      recs=recs.filter(function(r){return r.id!==rec.id;});
+      await fetch(SB_URL+'/rest/v1/recurrentes?id=eq.'+rec.id,{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).catch(function(e){console.warn(e);});
+    } else {
+      await saveRecToSupabase(rec);
     }
   }
+  // 2) Instancias a borrar: mismo día de la semana, de hoy en adelante, pendientes,
+  //    de esta recurrente (o al menos la clickeada). No toca los otros días.
+  var aBorrar=tasks.filter(function(x){
+    if(x.est!=='pendiente')return false;
+    if(x.fec<hoy)return false;
+    if(new Date(x.fec+'T12:00').getDay()!==dow)return false;
+    return (recId&&x.recId===recId)||x.id===tid;
+  });
+  var ids=aBorrar.map(function(x){return x.id;});
+  // 3) Sacar del array local
+  tasks=tasks.filter(function(x){return ids.indexOf(x.id)<0;});
+  // 4) Borrar en Supabase por id (y esperar)
+  await Promise.all(ids.map(function(id){
+    return fetch(SB_URL+'/rest/v1/tareas?id=eq.'+id,{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).catch(function(e){console.warn('del dia-semana',e);});
+  }));
   CM3('mrec-del-task');CM3('mdet');saveState();renderRec();render();
 }
 function delRecTaskSolo(){
@@ -3830,21 +3851,23 @@ function ddr(e){
   var newFec=e.currentTarget.dataset.date;
   var newDes=String(nh).padStart(2,'0')+':00';
   var newHas=String(Math.min(23,nh+Math.max(1,Math.round(dur)))).padStart(2,'0')+':00';
-  // Always confirm before moving
+  // Tarea NORMAL (no recurrente): mover directo, sin ninguna alerta.
+  if(!t.recId){
+    t.fec=newFec;t.des=newDes;t.has=newHas;t._dirty=true;
+    saveTaskToSupabase(t);
+    dragId=null;saveState();render();
+    return;
+  }
+  // Recurrente: sí pedir confirmación (elegir solo esta / toda la serie).
   var d=new Date(newFec+'T12:00');
   var MES2=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   var DISF2=['Domingo','Lunes','Martes','Miercoles','Jueves','Viernes','Sabado'];
   var destLabel=DISF2[d.getDay()]+' '+d.getDate()+' de '+MES2[d.getMonth()]+' '+newDes+'-'+newHas;
-  _pendingDrag={tid:t.id,newFec:newFec,newDes:newDes,newHas:newHas,isRec:!!t.recId};
+  _pendingDrag={tid:t.id,newFec:newFec,newDes:newDes,newHas:newHas,isRec:true};
   document.getElementById('drag-confirm-dest').textContent=destLabel;
   document.getElementById('drag-confirm-tar').textContent=t.tar+' - '+t.can;
-  if(t.recId){
-    document.getElementById('drag-confirm-rec').style.display='';
-    document.getElementById('drag-confirm-btn-mover').style.display='none';
-  } else {
-    document.getElementById('drag-confirm-rec').style.display='none';
-    document.getElementById('drag-confirm-btn-mover').style.display='';
-  }
+  document.getElementById('drag-confirm-rec').style.display='';
+  document.getElementById('drag-confirm-btn-mover').style.display='none';
   document.getElementById('mdrag-confirm').style.display='flex';
 }
 function dragConfirmMover(){
@@ -3898,6 +3921,7 @@ function editRec(id){
   document.getElementById('nrec-hasta').value=r.hasta||'';
   document.getElementById('mnew').dataset.recEditId=id;
   var fns=tFuns(r);document.querySelectorAll('#nfun-checks input').forEach(function(inp){inp.checked=fns.indexOf(inp.value)>=0;});
+  ntLockSel(true); // no permitir agregar canchas ni cambiar cliente al editar
   document.getElementById('mnew').style.display='flex';
 }
 var _clDragIdx=null;
@@ -4026,7 +4050,10 @@ async function syncToSupabase(){
     await Promise.all([
       // Tasks are saved individually via saveTaskToSupabase() — never via bulk sync
       Promise.resolve(),
-      (recs.length?syncTable('recurrentes',recs.map(function(r){return{id:r.id,cli:r.cli,can:r.can,tar:r.tar,funs:r.funs||[],maq:r.maq||'',des:r.des,has:r.has,spc:r.spc||'',dias:r.dias,hasta:r.hasta,skip:r.skip||[],chk:r.chk||{}};})):Promise.resolve()),
+      // Recurrentes: NO se sincronizan en masa (evita pisar cambios puntuales como el
+      // skip que agrega un encargado desde el campo). Se guardan individualmente en cada
+      // operación (crear/editar/skip/borrar), igual que las tareas.
+      Promise.resolve(),
       syncTable('novedades',novs.map(function(n){return{id:n.id,tipo:n.tipo,fun:n.fun,txt:n.txt,fec:n.fec,leida:n.leida};})),
       syncTable('alertas',alertas.map(function(a){return{id:a.id,descripcion:a.desc||a.descripcion||'',tipo:a.tipo,dias:a.dias,ref:a.ref||'',ctx:a.ctx||'',notes:a.notes||'',fecha:a.fecha||null,estado:a.estado,leida:a.leida};})),
       syncTable('maquinas',maquinas.map(function(m){return{id:m.id,nombre:m.nombre,tipo:m.tipo,marca:m.marca||'',cat:m.cat||'general',scope:m.scope,cli_id:m.cliId||null,hs:m.hs,intervalo:m.intervalo,proximo:m.proximo,tareas:m.tareas,svc_tareas:m.svcTareas||[],hist:m.hist||[]};})),
