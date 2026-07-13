@@ -1942,6 +1942,12 @@ async function saveNuevaTarea(){
       render();
       showSaveStatus('✓ '+creadasR+' recurrente'+(creadasR===1?'':'s')+' creada'+(creadasR===1?'':'s'),true);
     } else {
+      // Aviso de duplicado: ¿ya existe una tarea igual (cliente+cancha+tarea+fecha)?
+      var dups=targets.filter(function(g){return tasks.some(function(x){return x.cli===g.cli&&x.can===g.can&&x.tar===base.tar&&x.fec===fec&&x.est!=='cancelada';});});
+      if(dups.length){
+        var lst=dups.slice(0,5).map(function(d){return '• '+cN(d.cli)+' · '+d.can;}).join('\n');
+        if(!confirm('Ya '+(dups.length>1?'existen '+dups.length+' tareas de "'+base.tar+'"':'existe una tarea de "'+base.tar+'"')+' para el '+fec+':\n'+lst+'\n\n¿Crear de todos modos?')){ntRestoreBtn();return;}
+      }
       // Una tarea por cada cancha tildada
       var nuevas=[];
       targets.forEach(function(g){
