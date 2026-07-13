@@ -396,7 +396,7 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
     <div id="maq-grid" class="maq-grid"></div>
   </div>
   <div id="tab-alr" style="display:none">
-    <div class="sec-head"><h2><i class="ti ti-bell-ringing" style="vertical-align:-2px;margin-right:4px"></i>Alertas</h2><button class="btn primary" onclick="openAlrModal()"><i class="ti ti-plus"></i> Nueva alerta</button></div>
+    <div class="sec-head"><h2><i class="ti ti-bell-ringing" style="vertical-align:-2px;margin-right:4px"></i>Alertas</h2><div style="display:flex;gap:8px"><button class="btn" onclick="openAlrRules()"><i class="ti ti-repeat"></i> Reglas automáticas</button><button class="btn primary" onclick="openAlrModal()"><i class="ti ti-plus"></i> Nueva alerta</button></div></div>
     <div id="alr-list"></div>
   </div>
   <div id="tab-rec" style="display:none">
@@ -626,6 +626,17 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
 </div>
 
 <!-- MODAL ALERTA -->
+<div id="malr-rules" style="display:none" class="modal-bg"><div class="modal">
+  <h2><i class="ti ti-repeat" style="vertical-align:-2px;margin-right:6px"></i>Reglas automáticas</h2>
+  <p style="font-size:12px;color:var(--tx2);margin-bottom:12px">Avisan automáticamente cuando pasan los días indicados desde la última vez que se hizo esa tarea, por cancha. Se apagan solas al volver a hacerla.</p>
+  <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;padding:12px;background:var(--bg2);border-radius:var(--br);margin-bottom:14px">
+    <div class="fr" style="flex:2"><label>Tarea</label><select id="rule-tar"></select></div>
+    <div class="fr" style="flex:1"><label>Avisar a los (días)</label><input type="number" id="rule-dias" min="1" value="21"></div>
+    <button class="btn primary" onclick="addAlrRule()" style="height:38px"><i class="ti ti-plus"></i> Agregar</button>
+  </div>
+  <div id="rule-list"></div>
+  <div class="ma"><button onclick="CM3('malr-rules')">Cerrar</button></div>
+</div></div>
 <div id="malr" style="display:none" class="modal-bg"><div class="modal">
   <h2>Nueva alerta</h2>
   <div class="fr"><label>Descripcion</label><input type="text" id="alr-desc"></div>
@@ -743,6 +754,9 @@ let alertas=[
   {id:2,desc:'Service Cortadora A',tipo:'horas',dias:200,ref:'Cortadora A',ctx:'',notes:'',estado:'proxima',leida:false},
 ];
 let nxAlr=3;
+let alertRules=[];  // reglas automáticas: [{id,tar,dias,activo}]
+let dupIgnored={};  // grupos de duplicados descartados: {'cli|can|tar|fec': cantidadAlDescartar}
+let nxRule=1;
 
 let lluviaData={};
 let rainSrc={};   // origen por fecha: 'auto' (Carrasco) | 'manual'
@@ -1251,6 +1265,92 @@ function showRainBanner(){
 }
 function setRain(fec,val){const v=Math.round(parseFloat(val)||0);if(v>0){lluviaData[fec]=v;rainSrc[fec]='manual';}else{delete lluviaData[fec];delete rainSrc[fec];}saveStateLocal();saveWeatherToSupabase();render();}
 var _weatherSaveTimer=null;
+function openAlrRules(){
+  var sel=document.getElementById('rule-tar');
+  if(sel){sel.innerHTML='';var all=[].concat(tiposTarea||[]);(tiposTareaSint||[]).forEach(function(t){if(all.indexOf(t)<0)all.push(t);});all.forEach(function(t){sel.innerHTML+='<option>'+t+'</option>';});}
+  renderAlrRulesList();
+  document.getElementById('malr-rules').style.display='flex';
+}
+function renderAlrRulesList(){
+  var el=document.getElementById('rule-list');if(!el)return;
+  if(!alertRules.length){el.innerHTML='<div class="empty" style="padding:16px">Sin reglas. Agregá una arriba.</div>';return;}
+  var h='';
+  alertRules.forEach(function(r){
+    h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:0.5px solid var(--bo);border-radius:var(--br);margin-bottom:7px;'+(r.activo?'':'opacity:.5')+'">'
+      +'<div style="font-size:13px"><b>'+r.tar+'</b> · avisar a los <b>'+r.dias+'</b> días</div>'
+      +'<div style="display:flex;gap:6px">'
+      +'<button class="btn sm" onclick="toggleAlrRule('+r.id+')">'+(r.activo?'Pausar':'Activar')+'</button>'
+      +'<button class="btn sm" onclick="delAlrRule('+r.id+')" style="color:var(--red);border-color:var(--red)">Eliminar</button>'
+      +'</div></div>';
+  });
+  el.innerHTML=h;
+}
+function addAlrRule(){
+  var tar=document.getElementById('rule-tar').value;
+  var dias=parseInt(document.getElementById('rule-dias').value)||0;
+  if(!tar||dias<1){alert('Elegí una tarea y una cantidad de días válida');return;}
+  if(alertRules.some(function(r){return r.tar===tar;})){alert('Ya existe una regla para "'+tar+'". Eliminala primero si querés cambiarla.');return;}
+  alertRules.push({id:nxRule++,tar:tar,dias:dias,activo:true});
+  saveAlertRules();renderAlrRulesList();checkTaskAlertas();renderAlr();
+}
+function delAlrRule(id){
+  alertRules=alertRules.filter(function(r){return r.id!==id;});
+  saveAlertRules();renderAlrRulesList();checkTaskAlertas();renderAlr();
+}
+function toggleAlrRule(id){
+  var r=alertRules.find(function(x){return x.id===id;});if(r)r.activo=!r.activo;
+  saveAlertRules();renderAlrRulesList();checkTaskAlertas();renderAlr();
+}
+function checkTaskAlertas(){
+  // Por cada regla activa, mira la ÚLTIMA tarea completada de ese tipo por (cliente, cancha)
+  // y crea una alerta cuando pasaron los días configurados. Se apaga sola al volver a hacerla.
+  var today=fD(new Date());
+  var activeKeys={};
+  (alertRules||[]).forEach(function(rule){
+    if(!rule.activo)return;
+    var last={};
+    tasks.forEach(function(t){
+      if(t.tar!==rule.tar||t.est!=='completada'||!t.fec)return;
+      var k=t.cli+'|'+t.can;
+      if(!last[k]||t.fec>last[k])last[k]=t.fec;
+    });
+    Object.keys(last).forEach(function(k){
+      var parts=k.split('|');var cli=parseInt(parts[0]);var can=parts.slice(1).join('|');
+      var lastFec=last[k];
+      var due=fD(aD(new Date(lastFec+'T12:00'),rule.dias));
+      if(today<due)return;  // todavía no corresponde
+      var ref='rule:'+rule.id+':'+k;
+      activeKeys[ref]=true;
+      var diasVenc=Math.round((new Date(today+'T12:00')-new Date(due+'T12:00'))/86400000);
+      var desc=rule.tar+' — '+cN(cli)+' · '+can;
+      var notes='Última: '+lastFec+' · correspondía el '+due+(diasVenc>0?' (hace '+diasVenc+' día'+(diasVenc===1?'':'s')+')':' (hoy)');
+      var ex=alertas.find(function(a){return a.ref===ref;});
+      var estado=diasVenc>7?'vencida':'proxima';
+      if(ex){
+        if(ex.baseFec!==lastFec)ex.leida=false;   // hubo una nueva tarea → reactivar
+        ex.desc=desc;ex.notes=notes;ex.dias=rule.dias;ex.estado=ex.leida?'ok':estado;ex.baseFec=lastFec;ex.ctx=can;
+      } else {
+        alertas.unshift({id:nxAlr++,desc:desc,tipo:'regla',dias:rule.dias,ref:ref,ctx:can,notes:notes,estado:estado,leida:false,baseFec:lastFec});
+      }
+    });
+  });
+  // Sacar alertas de regla que ya no corresponden (se volvió a hacer la tarea o se borró la regla)
+  alertas=alertas.filter(function(a){return a.tipo!=='regla'||activeKeys[a.ref];});
+  updateAlrBadge();
+}
+function saveDupIgnored(){
+  sbUpsert('configuracion',[{clave:'dup_ignored',valor:dupIgnored}]).catch(function(e){console.warn('saveDupIgnored',e);});
+}
+function dismissDupGroup(key,count){
+  dupIgnored[key]=count;saveDupIgnored();renderConsulta();
+}
+function restoreDupsIgnored(){
+  if(!confirm('¿Volver a mostrar todos los grupos descartados?'))return;
+  dupIgnored={};saveDupIgnored();renderConsulta();
+}
+function saveAlertRules(){
+  sbUpsert('configuracion',[{clave:'alert_rules',valor:alertRules}]).catch(function(e){console.warn('saveAlertRules',e);});
+}
 function saveWeatherToSupabase(){
   // Debounce to avoid spamming on rapid edits
   if(_weatherSaveTimer)clearTimeout(_weatherSaveTimer);
@@ -2673,17 +2773,30 @@ function renderConsultaDups(ct){
     var k=t.cli+'|'+t.can+'|'+t.tar+'|'+t.fec;
     (groups[k]=groups[k]||[]).push(t);
   });
-  var dupGroups=Object.keys(groups).map(function(k){return groups[k];}).filter(function(g){return g.length>=2;});
+  var allDupGroups=Object.keys(groups).map(function(k){return groups[k];}).filter(function(g){return g.length>=2;});
+  // Descartar grupos marcados como "no son duplicados" (salvo que hayan crecido desde entonces)
+  var dupGroups=allDupGroups.filter(function(g){
+    var k=g[0].cli+'|'+g[0].can+'|'+g[0].tar+'|'+g[0].fec;
+    return !(dupIgnored[k]&&dupIgnored[k]>=g.length);
+  });
+  var nDescartados=allDupGroups.length-dupGroups.length;
   dupGroups.sort(function(a,b){return b[0].fec.localeCompare(a[0].fec);});
-  if(!dupGroups.length){ct.innerHTML='<div class="empty">No se encontraron posibles duplicados en '+(isYear?('el año '+_conYear):(MES[_conMonth]+' '+_conYear))+' 👍</div>';return;}
+  if(!dupGroups.length){
+    var msg='<div class="empty">No se encontraron posibles duplicados en '+(isYear?('el año '+_conYear):(MES[_conMonth]+' '+_conYear))+' 👍</div>';
+    if(nDescartados>0)msg+='<div style="text-align:center;margin-top:10px;font-size:12px;color:var(--tx3)">'+nDescartados+' grupo(s) descartado(s) · <a onclick="restoreDupsIgnored()" style="color:var(--blue);cursor:pointer">volver a mostrar</a></div>';
+    ct.innerHTML=msg;return;
+  }
   var totalTareas=dupGroups.reduce(function(a,g){return a+g.length;},0);
-  var h='<div style="background:#B45309;color:#fff;border-radius:var(--br);padding:12px 16px;margin-bottom:14px;font-size:13px"><b>'+dupGroups.length+'</b> grupo(s) con posibles duplicados · <b>'+totalTareas+'</b> tareas en total. Revisá cada grupo y eliminá la que sobre.</div>';
+  var h='<div style="background:#B45309;color:#fff;border-radius:var(--br);padding:12px 16px;margin-bottom:14px;font-size:13px"><b>'+dupGroups.length+'</b> grupo(s) con posibles duplicados · <b>'+totalTareas+'</b> tareas en total. Revisá cada grupo: eliminá la que sobre, o descartá el grupo si están bien.'+(nDescartados>0?' <a onclick="restoreDupsIgnored()" style="color:#fff;text-decoration:underline;cursor:pointer">('+nDescartados+' descartado(s) — volver a mostrar)</a>':'')+'</div>';
   dupGroups.forEach(function(g){
     var t0=g[0];
+    var gkey=t0.cli+'|'+t0.can+'|'+t0.tar+'|'+t0.fec;
     var d=new Date(t0.fec+'T12:00');
     var fecStr=d.toLocaleDateString('es-UY',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
     h+='<div style="border:1px solid var(--bo);border-radius:var(--br);margin-bottom:12px;overflow:hidden">';
-    h+='<div style="background:var(--bg2);padding:8px 12px;font-size:13px;font-weight:600">'+t0.tar+' · '+cN(t0.cli)+' · '+t0.can+' · <span style="text-transform:capitalize">'+fecStr+'</span> <span style="color:var(--tx3);font-weight:400">('+g.length+' copias)</span></div>';
+    h+='<div style="background:var(--bg2);padding:8px 12px;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:space-between;gap:8px"><span>'+t0.tar+' · '+cN(t0.cli)+' · '+t0.can+' · <span style="text-transform:capitalize">'+fecStr+'</span> <span style="color:var(--tx3);font-weight:400">('+g.length+' copias)</span></span>'
+      +'<button onclick="dismissDupGroup(\''+gkey.replace(/'/g,"\\'")+'\','+g.length+')" style="flex-shrink:0;padding:5px 10px;border-radius:var(--br);border:1px solid var(--bo2);background:var(--bg);color:var(--tx2);font-size:11px;cursor:pointer;font-family:inherit" title="No son duplicados, no mostrar más">✓ Descartar</button>'
+      +'</div>';
     g.forEach(function(t){
       var funs=tFuns(t).join(', ')||'sin funcionario';
       var maq=t.maq?(t.maq+(t.maq2?' + '+t.maq2:'')):'sin máquina';
@@ -3817,6 +3930,7 @@ function checkMaqAlertas(){
     if(ex){ex.estado=rr<=0?'vencida':rr<=20?'proxima':'activa';ex.notes='Faltan '+rr.toFixed(1)+'hs';}
     else if(rr<=20&&rr>=-200)alertas.unshift({id:nxAlr++,desc:'Service '+m.nombre,tipo:'horas',dias:m.proximo,ref:m.nombre,ctx:'',notes:'Faltan '+rr.toFixed(1)+'hs',estado:rr<=0?'vencida':'proxima',leida:false});
   });
+  checkTaskAlertas();
   updateAlrBadge();
 }
 function renderFuncSem(){
@@ -4270,6 +4384,8 @@ async function loadFromSupabase(){
       if(c.clave==='svc_tareas')SVC_TAREAS=c.valor;
       if(c.clave==='checklists')checklists=c.valor;
       if(c.clave==='lluvia_data'&&c.valor)lluviaData=c.valor;
+      if(c.clave==='alert_rules'&&c.valor){alertRules=c.valor;nxRule=(alertRules.reduce(function(m,r){return Math.max(m,r.id||0);},0))+1;}
+      if(c.clave==='dup_ignored'&&c.valor)dupIgnored=c.valor;
       if(c.clave==='lluvia_src'&&c.valor)rainSrc=c.valor;
       if(c.clave==='heladas_data'&&c.valor)heladasData=c.valor;
       if(c.clave==='temp_data'&&c.valor)tempData=c.valor;
@@ -4369,7 +4485,7 @@ UNB();updateAlrBadge();
 if(navigator.onLine){
   loadFromSupabase().then(async function(ok){
     fetchCarrascoRain();
-    if(ok){await dedupeTasks();GRT();render();rebuildSelects();UNB();updateAlrBadge();}
+    if(ok){await dedupeTasks();GRT();render();rebuildSelects();UNB();updateAlrBadge();checkMaqAlertas();}
   });
 } else {
   setSBStatus(false);
