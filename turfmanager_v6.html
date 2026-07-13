@@ -1104,9 +1104,10 @@ function render(){
         var selOutline=(_selectMode&&_selectedTasks[t.id])?';outline:3px solid var(--blue)':'';
         h+='<div class="chip st-'+t.est+'" id="chip-'+t.id+'" style="background:'+bg+';color:'+tx+cflStyle+selOutline+'"'+(_selectMode?'':dragAttr)+' onclick="'+chipOnclick+'">';
         h+='<b>'+t.tar+' - '+t.can+'</b>';
-        var maqLabel=(t.maq?(t.maq+(t.maq2?' + '+t.maq2:'')):'');
-        // En la vista semanal se muestra el CLIENTE en vez del horario programado.
-        h+='<span>'+cN(t.cli)+(maqLabel?' · '+maqLabel:'')+'</span>';
+        // Segunda línea de la tarjeta: Cliente - Horario programado (sin máquina).
+        var f24=function(x){if(!x)return x;var p=x.split(':');return String(parseInt(p[0])).padStart(2,'0')+':'+(p[1]||'00');};
+        var horario=f24(t.des)+(t.has?' - '+f24(t.has):'');
+        h+='<span>'+cN(t.cli)+' - '+horario+'</span>';
         h+='</div>';
       });
       // Actividades deportivas chips
