@@ -370,6 +370,7 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
         <div style="display:flex;border:0.5px solid var(--bo2);border-radius:var(--br);overflow:hidden">
           <button id="cm-tareas" onclick="setConModo('tareas')" style="font-size:11px;padding:3px 12px;border:none;background:var(--blue);color:#fff;cursor:pointer;font-family:inherit">Tareas</button>
           <button id="cm-lluvia" onclick="setConModo('lluvia')" style="font-size:11px;padding:3px 12px;border:none;background:var(--bg2);color:var(--tx2);cursor:pointer;font-family:inherit">🌧️ Lluvia</button>
+          <button id="cm-dups" onclick="setConModo('dups')" style="font-size:11px;padding:3px 12px;border:none;background:var(--bg2);color:var(--tx2);cursor:pointer;font-family:inherit">🔍 Duplicados</button>
         </div>
         <button onclick="exportConsulta()" class="btn sm" style="display:flex;align-items:center;gap:5px"><i class="ti ti-file-spreadsheet"></i> Excel</button>
         <div style="display:flex;border:0.5px solid var(--bo2);border-radius:var(--br);overflow:hidden">
@@ -2464,11 +2465,15 @@ var _conVista='anio';
 var _conModo='tareas';
 function setConModo(m){
   _conModo=m;
-  var bt=document.getElementById('cm-tareas'),bl=document.getElementById('cm-lluvia');
-  bt.style.background=m==='tareas'?'var(--blue)':'var(--bg2)';bt.style.color=m==='tareas'?'#fff':'var(--tx2)';
-  bl.style.background=m==='lluvia'?'var(--blue)':'var(--bg2)';bl.style.color=m==='lluvia'?'#fff':'var(--tx2)';
-  var f=document.getElementById('con-filtros');if(f)f.style.display=m==='lluvia'?'none':'';
-  var h=document.querySelector('#tab-consulta .sec-head h2');if(h)h.innerHTML='<i class="ti ti-list-search" style="vertical-align:-2px;margin-right:4px"></i>'+(m==='lluvia'?'Consulta de lluvia':'Consulta de tareas');
+  var bt=document.getElementById('cm-tareas'),bl=document.getElementById('cm-lluvia'),bd=document.getElementById('cm-dups');
+  [['tareas',bt],['lluvia',bl],['dups',bd]].forEach(function(p){
+    if(!p[1])return;
+    p[1].style.background=(m===p[0])?'var(--blue)':'var(--bg2)';
+    p[1].style.color=(m===p[0])?'#fff':'var(--tx2)';
+  });
+  var f=document.getElementById('con-filtros');if(f)f.style.display=(m==='tareas')?'':'none';
+  var titulo=m==='lluvia'?'Consulta de lluvia':(m==='dups'?'Posibles duplicados':'Consulta de tareas');
+  var h=document.querySelector('#tab-consulta .sec-head h2');if(h)h.innerHTML='<i class="ti ti-list-search" style="vertical-align:-2px;margin-right:4px"></i>'+titulo;
   renderConsulta();
 }
 // Días con lluvia registrada en el período (>0), ordenados más reciente primero
@@ -2601,6 +2606,7 @@ function renderConsulta(){
   var ct=document.getElementById('consulta-ct');
   if(!ct)return;
   if(_conModo==='lluvia'){renderConsultaLluvia(ct);return;}
+  if(_conModo==='dups'){renderConsultaDups(ct);return;}
   var list=getConsultaTasks();
   if(!list.length){ct.innerHTML='<div class="empty">Sin tareas completadas con esos filtros</div>';return;}
   var h='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">'+list.length+' tarea'+(list.length===1?'':'s')+' completada'+(list.length===1?'':'s')+'</div>';
@@ -2636,6 +2642,53 @@ function renderConsulta(){
 function splitSpc(spc){
   if(!spc)return[];
   return String(spc).split('+').map(function(s){return s.trim();}).filter(function(s){return s.length>0;});
+}
+function renderConsultaDups(ct){
+  // Agrupa por cliente|cancha|tarea|fecha (cualquier hora/estado) y muestra los grupos con 2+.
+  var isYear=_conVista==='anio';
+  var scope=(typeof webClientes!=='undefined'&&webIsEncargado)?webClientes:null;
+  var groups={};
+  tasks.forEach(function(t){
+    if(t.est==='cancelada')return;
+    if(scope&&scope.indexOf(t.cli)<0)return;
+    var d=new Date(t.fec+'T12:00');
+    if(isYear){if(d.getFullYear()!==_conYear)return;}
+    else{if(d.getMonth()!==_conMonth||d.getFullYear()!==_conYear)return;}
+    var k=t.cli+'|'+t.can+'|'+t.tar+'|'+t.fec;
+    (groups[k]=groups[k]||[]).push(t);
+  });
+  var dupGroups=Object.keys(groups).map(function(k){return groups[k];}).filter(function(g){return g.length>=2;});
+  dupGroups.sort(function(a,b){return b[0].fec.localeCompare(a[0].fec);});
+  if(!dupGroups.length){ct.innerHTML='<div class="empty">No se encontraron posibles duplicados en '+(isYear?('el año '+_conYear):(MES[_conMonth]+' '+_conYear))+' 👍</div>';return;}
+  var totalTareas=dupGroups.reduce(function(a,g){return a+g.length;},0);
+  var h='<div style="background:#B45309;color:#fff;border-radius:var(--br);padding:12px 16px;margin-bottom:14px;font-size:13px"><b>'+dupGroups.length+'</b> grupo(s) con posibles duplicados · <b>'+totalTareas+'</b> tareas en total. Revisá cada grupo y eliminá la que sobre.</div>';
+  dupGroups.forEach(function(g){
+    var t0=g[0];
+    var d=new Date(t0.fec+'T12:00');
+    var fecStr=d.toLocaleDateString('es-UY',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+    h+='<div style="border:1px solid var(--bo);border-radius:var(--br);margin-bottom:12px;overflow:hidden">';
+    h+='<div style="background:var(--bg2);padding:8px 12px;font-size:13px;font-weight:600">'+t0.tar+' · '+cN(t0.cli)+' · '+t0.can+' · <span style="text-transform:capitalize">'+fecStr+'</span> <span style="color:var(--tx3);font-weight:400">('+g.length+' copias)</span></div>';
+    g.forEach(function(t){
+      var funs=tFuns(t).join(', ')||'sin funcionario';
+      var maq=t.maq?(t.maq+(t.maq2?' + '+t.maq2:'')):'sin máquina';
+      var estCol=t.est==='completada'?'#639922':(t.est==='en_curso'?'#E8A838':'var(--tx3)');
+      h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border-top:0.5px solid var(--bo)">'
+        +'<div style="font-size:12px;line-height:1.5"><span style="color:'+estCol+';font-weight:600">'+t.est+'</span> · '+(t.des||'--')+'-'+(t.has||'--')+'<br><span style="color:var(--tx2)">👤 '+funs+' · ⚙️ '+maq+(t.spc?' · '+t.spc:'')+'</span></div>'
+        +'<button onclick="delDupTask('+t.id+')" style="flex-shrink:0;padding:7px 12px;border-radius:var(--br);border:1px solid var(--red);background:none;color:var(--red);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">Eliminar</button>'
+        +'</div>';
+    });
+    h+='</div>';
+  });
+  ct.innerHTML=h;
+}
+async function delDupTask(id){
+  var t=tasks.find(function(x){return x.id===id;});if(!t)return;
+  if(!confirm('¿Eliminar esta tarea?\n'+t.tar+' · '+cN(t.cli)+' · '+t.can+' · '+t.fec+' '+(t.des||'')+'\n'+(t.est==='completada'?'Está completada. ':'')+'Esta acción no se puede deshacer.'))return;
+  tasks=tasks.filter(function(x){return x.id!==id;});
+  try{
+    await fetch(SB_URL+'/rest/v1/tareas?id=eq.'+id,{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
+  }catch(e){console.warn('delDupTask',e);}
+  saveState();renderConsulta();
 }
 function renderConsultaLluvia(ct){
   var list=getConsultaLluvia();
