@@ -2311,13 +2311,13 @@ async function renderReg(){
           content=val;
           extraAttr=' title="'+( heladaLabel[val]||val)+'"';
         }
-        else if(isRiego&&val>0){cls+=' hv';content=val.toFixed(2)+'mm';}
+        else if(isRiego&&val>0){cls+=' hv';content=Math.round(val);}
         else if(val>0){cls+=' hv';content='x';}
       }
       h+=`<td class="${cls}">${content}</td>`;
     }
     const isHelRow=row.key==='_heladas';
-const td=tot!==null?(isRain?`${tot}mm`:isTemp?`${tot}°C`:isHelRow?tot:row.key==='Riego'?`${typeof tot==='number'?tot.toFixed(2):tot}mm`:tot):'';
+const td=tot!==null?(isRain?`${tot}mm`:isTemp?`${tot}°C`:isHelRow?tot:row.key==='Riego'?(typeof tot==='number'?Math.round(tot):tot):tot):'';
     h+=`<td class="tot2">${td}</td></tr>`;
   });
   h+=`</tbody></table></div>`;
