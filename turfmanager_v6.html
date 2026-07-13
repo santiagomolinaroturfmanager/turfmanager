@@ -218,6 +218,8 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
 .msel-item{display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:12px;cursor:pointer;white-space:nowrap}
 .msel-item:hover{background:var(--bg2)}
 .msel-item input{accent-color:var(--blue);cursor:pointer;flex-shrink:0}
+.alrf-btn{font-size:11px;padding:4px 11px;border-radius:20px;border:1px solid var(--bo2);background:var(--bg);color:var(--tx2);cursor:pointer;font-family:inherit}
+.alrf-btn.on{background:var(--blue);color:#fff;border-color:var(--blue)}
 </style>
 </head>
 <body>
@@ -397,6 +399,26 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
   </div>
   <div id="tab-alr" style="display:none">
     <div class="sec-head"><h2><i class="ti ti-bell-ringing" style="vertical-align:-2px;margin-right:4px"></i>Alertas</h2><div style="display:flex;gap:8px"><button class="btn" onclick="openAlrRules()"><i class="ti ti-repeat"></i> Reglas automáticas</button><button class="btn primary" onclick="openAlrModal()"><i class="ti ti-plus"></i> Nueva alerta</button></div></div>
+    <div id="alr-controls" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:14px;padding:11px 13px;background:var(--bg2);border-radius:var(--br)">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:11px;color:var(--tx2);margin-right:2px">Mostrar:</span>
+        <button id="alrf-vencida" onclick="alrToggleEstado('vencida')" class="alrf-btn">Vencidas</button>
+        <button id="alrf-proxima" onclick="alrToggleEstado('proxima')" class="alrf-btn">Proximas</button>
+        <button id="alrf-activa" onclick="alrToggleEstado('activa')" class="alrf-btn">Activas</button>
+        <button id="alrf-ok" onclick="alrToggleEstado('ok')" class="alrf-btn">Resueltas</button>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span style="font-size:11px;color:var(--tx2)">Ordenar:</span>
+        <select id="alr-orden" onchange="alrSetOrden(this.value)" style="font-size:12px;padding:4px 8px">
+          <option value="urgente">Mas urgentes</option>
+          <option value="reciente">Mas recientes</option>
+          <option value="antigua">Mas antiguas</option>
+          <option value="cliente">Por cliente</option>
+          <option value="tipo">Por tipo</option>
+        </select>
+      </div>
+      <div id="alr-cli-filter" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;width:100%;border-top:0.5px solid var(--bo);padding-top:10px"></div>
+    </div>
     <div id="alr-list"></div>
   </div>
   <div id="tab-rec" style="display:none">
@@ -756,6 +778,9 @@ let alertas=[
 let nxAlr=3;
 let alertRules=[];  // reglas automáticas: [{id,tar,dias,activo}]
 let dupIgnored={};  // grupos de duplicados descartados: {'cli|can|tar|fec': cantidadAlDescartar}
+var _alrEstados={vencida:true,proxima:true,activa:true,ok:false};
+var _alrOrden='urgente';
+var _alrCliSel=[];  // filtro por cliente (vacío = todos; '__none__' = sin cliente)
 let nxRule=1;
 
 let lluviaData={};
@@ -1328,9 +1353,9 @@ function checkTaskAlertas(){
       var estado=diasVenc>7?'vencida':'proxima';
       if(ex){
         if(ex.baseFec!==lastFec)ex.leida=false;   // hubo una nueva tarea → reactivar
-        ex.desc=desc;ex.notes=notes;ex.dias=rule.dias;ex.estado=ex.leida?'ok':estado;ex.baseFec=lastFec;ex.ctx=can;
+        ex.desc=desc;ex.notes=notes;ex.dias=rule.dias;ex.estado=ex.leida?'ok':estado;ex.baseFec=lastFec;ex.ctx=can;ex.cli=cli;
       } else {
-        alertas.unshift({id:nxAlr++,desc:desc,tipo:'regla',dias:rule.dias,ref:ref,ctx:can,notes:notes,estado:estado,leida:false,baseFec:lastFec});
+        alertas.unshift({id:nxAlr++,desc:desc,tipo:'regla',dias:rule.dias,ref:ref,ctx:can,notes:notes,estado:estado,leida:false,baseFec:lastFec,cli:cli});
       }
     });
   });
@@ -3890,24 +3915,77 @@ function openAlrModal(){
   if(cliSel){cliSel.innerHTML='<option value="">opcional</option>';clientes.forEach(function(c){cliSel.innerHTML+='<option value="'+c.nombre+'">'+c.nombre+'</option>';});}
   alrTipoChange();document.getElementById('malr').style.display='flex';
 }
+function alrCli(a){
+  if(a.cli!=null)return a.cli;
+  var c=clientes.find(function(x){return a.ctx===x.nombre||(a.desc&&a.desc.indexOf(x.nombre)>=0);});
+  return c?c.id:null;
+}
+function alrFecha(a){return a.fecha||a.baseFec||'';}
+function alrToggleEstado(e){
+  _alrEstados[e]=!_alrEstados[e];
+  var b=document.getElementById('alrf-'+e);if(b)b.classList.toggle('on',_alrEstados[e]);
+  renderAlr();
+}
+function alrSetOrden(v){_alrOrden=v;renderAlr();}
+function alrToggleCli(id){
+  if(id==='__all__'){_alrCliSel=[];renderAlr();return;}
+  var v=(id==='__none__')?'__none__':parseInt(id);
+  var i=_alrCliSel.indexOf(v);
+  if(i>=0)_alrCliSel.splice(i,1);else _alrCliSel.push(v);
+  renderAlr();
+}
+function renderAlrCliFilter(estadoLista){
+  var cont=document.getElementById('alr-cli-filter');if(!cont)return;
+  // clientes (o "sin cliente") que tienen alertas según el filtro de estado actual
+  var present={};var hasNone=false;
+  estadoLista.forEach(function(a){var c=alrCli(a);if(c==null)hasNone=true;else present[c]=true;});
+  var ids=Object.keys(present).map(Number);
+  if(!ids.length&&!hasNone){cont.innerHTML='';return;}
+  var chip=function(val,label,active){return '<button onclick="alrToggleCli(\''+val+'\')" class="alrf-btn'+(active?' on':'')+'">'+label+'</button>';};
+  var h='<span style="font-size:11px;color:var(--tx2);margin-right:2px">Cliente:</span>';
+  h+=chip('__all__','Todos',_alrCliSel.length===0);
+  clientes.forEach(function(c){if(present[c.id])h+=chip(c.id,c.nombre,_alrCliSel.indexOf(c.id)>=0);});
+  if(hasNone)h+=chip('__none__','Sin cliente',_alrCliSel.indexOf('__none__')>=0);
+  cont.innerHTML=h;
+}
 function renderAlr(){
   var el=document.getElementById('alr-list');if(!el)return;
+  ['vencida','proxima','activa','ok'].forEach(function(e){var b=document.getElementById('alrf-'+e);if(b)b.classList.toggle('on',!!_alrEstados[e]);});
+  var estadoLista=alertas.filter(function(a){return _alrEstados[a.estado];});
+  renderAlrCliFilter(estadoLista);
+  var lista=estadoLista.filter(function(a){
+    if(!_alrCliSel.length)return true;
+    var c=alrCli(a);
+    return _alrCliSel.indexOf(c==null?'__none__':c)>=0;
+  });
+  var rank={vencida:0,proxima:1,activa:2,ok:3};
+  lista.sort(function(a,b){
+    if(_alrOrden==='urgente'){var ra=rank[a.estado]!=null?rank[a.estado]:9,rb=rank[b.estado]!=null?rank[b.estado]:9;if(ra!==rb)return ra-rb;return alrFecha(a).localeCompare(alrFecha(b));}
+    if(_alrOrden==='reciente')return alrFecha(b).localeCompare(alrFecha(a));
+    if(_alrOrden==='antigua')return alrFecha(a).localeCompare(alrFecha(b));
+    if(_alrOrden==='cliente'){var ca=cN(alrCli(a))||'zzz',cb=cN(alrCli(b))||'zzz';if(ca!==cb)return ca.localeCompare(cb);return (rank[a.estado]||9)-(rank[b.estado]||9);}
+    if(_alrOrden==='tipo'){var ta=(a.ref||a.tipo||''),tb=(b.ref||b.tipo||'');if(ta!==tb)return ta.localeCompare(tb);return (rank[a.estado]||9)-(rank[b.estado]||9);}
+    return 0;
+  });
   if(!alertas.length){el.innerHTML='<div class="empty">Sin alertas</div>';return;}
+  if(!lista.length){el.innerHTML='<div class="empty">No hay alertas con los filtros elegidos</div>';return;}
   var h='';
-  alertas.forEach(function(a){
+  lista.forEach(function(a){
     var nivel=a.estado==='vencida'?'crit':a.estado==='proxima'?'warn':a.estado==='ok'?'ok':'info';
     var col={crit:'#E24B4A',warn:'#E8A838',info:'var(--blue)',ok:'#639922'}[nivel];
     var stateLbl={vencida:'Vencida',proxima:'Proxima',activa:'Activa',ok:'Resuelta'}[a.estado]||a.estado;
     h+='<div class="alr-item '+nivel+'"><div style="flex:1"><div style="font-size:13px;font-weight:500">'+a.desc+'</div>';
-    if(a.ctx)h+='<div style="font-size:11px;color:var(--tx2);margin-top:2px">'+a.ctx+'</div>';
+    if(a.ctx&&a.desc.indexOf(a.ctx)<0)h+='<div style="font-size:11px;color:var(--tx2);margin-top:2px">'+a.ctx+'</div>';
     if(a.notes)h+='<div style="font-size:11px;color:var(--tx2)">'+a.notes+'</div>';
     h+='</div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0">';
     h+='<span style="font-size:10px;font-weight:500;padding:2px 8px;border-radius:4px;color:'+col+'">'+stateLbl+'</span>';
     if(a.estado!=='ok')h+='<button class="btn sm" onclick="resolveAlr('+a.id+')"><i class="ti ti-check"></i> Resolver</button>';
+    else h+='<button class="btn sm" onclick="reactivarAlr('+a.id+')" style="color:var(--tx2)"><i class="ti ti-rotate"></i> Reabrir</button>';
     h+='</div></div>';
   });
   el.innerHTML=h;
 }
+function reactivarAlr(id){var a=alertas.find(function(x){return x.id===id;});if(a){a.leida=false;a.estado=a.tipo==='regla'?'proxima':'activa';}saveState();updateAlrBadge();renderAlr();}
 function resolveAlr(id){var a=alertas.find(function(x){return x.id===id;});if(a){a.estado='ok';a.leida=true;}saveState();updateAlrBadge();renderAlr();}
 function alrSave(){
   var desc=(document.getElementById('alr-desc')||{value:''}).value.trim();if(!desc){alert('Ingresa descripcion');return;}
