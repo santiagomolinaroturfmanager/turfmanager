@@ -963,13 +963,29 @@ function rebuildSelects(){
 function ncliSel(){return [...document.querySelectorAll('#ncli-multi input:checked')].map(function(i){return parseInt(i.value);});}
 function ncanSel(){return [...document.querySelectorAll('#ncan-multi input:checked')].map(function(i){return {cli:parseInt(i.dataset.cli),can:i.value};});}
 // Arma los chips checkbox de cliente (preChecked = array de ids a tildar)
+var _ntEditMode=false;
 function ntLockSel(lock){
-  // Editar = una sola tarea: bloquea cambiar cliente/cancha (Opción A)
-  document.querySelectorAll('#ncli-multi input, #ncan-multi input').forEach(function(i){
+  // Editar = UNA tarea. Se bloquea el CLIENTE (no se cambia acá), pero la CANCHA sí se puede
+  // cambiar, de a una sola (single-select). Así se puede corregir la cancha sin borrar y recrear.
+  _ntEditMode=lock;
+  document.querySelectorAll('#ncli-multi input').forEach(function(i){
     i.disabled=lock;
     var lbl=i.closest('label')||i.parentNode;
     if(lbl){lbl.style.cursor=lock?'not-allowed':'pointer';lbl.style.opacity=(lock&&!i.checked)?'.4':'1';}
   });
+  // Las canchas quedan habilitadas (el single-select lo maneja nCanClicked)
+  document.querySelectorAll('#ncan-multi input').forEach(function(i){
+    i.disabled=false;
+    var lbl=i.closest('label')||i.parentNode;
+    if(lbl){lbl.style.cursor='pointer';lbl.style.opacity='1';}
+  });
+}
+// Click en un checkbox de cancha: en modo edición fuerza selección única
+function nCanClicked(inp){
+  if(_ntEditMode&&inp.checked){
+    document.querySelectorAll('#ncan-multi input').forEach(function(i){if(i!==inp)i.checked=false;});
+  }
+  nUCcan();
 }
 function nBuildCli(preChecked){
   var wrap=document.getElementById('ncli-multi');if(!wrap)return;
@@ -1000,7 +1016,7 @@ function nUC(){
         var lbl=document.createElement('label');
         lbl.style.cssText='display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;font-size:13px';
         var ck=prev[cid+'|'+nm]?' checked':'';
-        lbl.innerHTML='<input type="checkbox" value="'+nm.replace(/"/g,'&quot;')+'" data-cli="'+cid+'" data-tipo="'+tipo+'"'+ck+' onchange="nUCcan()" style="accent-color:var(--blue);width:15px;height:15px"> '+nm+(tipo==='sintetica'?' [S]':'');
+        lbl.innerHTML='<input type="checkbox" value="'+nm.replace(/"/g,'&quot;')+'" data-cli="'+cid+'" data-tipo="'+tipo+'"'+ck+' onchange="nCanClicked(this)" style="accent-color:var(--blue);width:15px;height:15px"> '+nm+(tipo==='sintetica'?' [S]':'');
         wrap.appendChild(lbl);
       });
     });
