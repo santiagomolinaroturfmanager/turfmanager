@@ -430,6 +430,11 @@ async function initLogin(){
   loadData().catch(function(){});
 }
 
+var ADMIN_HASH='6719e9652e0b0550c867a3a8ce833c50cebc2633583332628a9bf671bb93093c';
+async function sha256(str){
+  var buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+}
 async function doLogin(){
   var input=document.getElementById('login-input').value.trim().toLowerCase().replace(/\s+/g,'');
   var errEl=document.getElementById('no-funs');
@@ -441,17 +446,26 @@ async function doLogin(){
     if(!ok){errEl.textContent=sbMotivoCampo(_sbLastErr);errEl.style.display='block';return;}
   }
   // Find by username or first name
-  if(input==='admin'){enterApp('admin');return;}
-  if(input==='admin'){enterApp('admin');return;}
+  // Admin: exige la contraseña de admin (antes entraba sin nada)
+  if(input==='admin'){
+    var ah=await sha256(pass);
+    if(ah===ADMIN_HASH){enterApp('admin');return;}
+    errEl.textContent='Contraseña de admin incorrecta.';errEl.style.display='block';return;
+  }
   var f=funcionarios.find(function(x){
     var uname=(x.username||x.nombre.split(' ')[0]).toLowerCase().replace(/\s+/g,'');
     return uname===input;
   });
   if(!f){errEl.textContent='Usuario no encontrado. Verificá con el admin.';errEl.style.display='block';return;}
-  // Check password if set
+  // Seguridad: exige contraseña SIEMPRE. Sin contraseña configurada NO se entra
+  // (antes se salteaba el chequeo y entraba cualquiera).
   var passEl=document.getElementById('login-pass');
   var pass=passEl?passEl.value:'';
-  if(f.password&&f.password!==''&&pass!==f.password){
+  if(!f.password||f.password===''){
+    errEl.textContent='Tu usuario no tiene contraseña configurada. Pedile al admin que te asigne una.';
+    errEl.style.display='block';return;
+  }
+  if(pass!==f.password){
     errEl.textContent='Contraseña incorrecta.';errEl.style.display='block';return;
   }
   enterApp(f.nombre);

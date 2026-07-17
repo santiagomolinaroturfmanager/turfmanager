@@ -3665,7 +3665,21 @@ function editFuncionario(id){
   if(encEl)encEl.checked=!!f.encargado;
   var exEl=document.getElementById('efun-exclusivo');
   if(exEl)exEl.checked=!!f.exclusivo;
+  // Contraseña: prellenar con la actual (se ve como puntos) para saber si tiene una
+  var passEl=document.getElementById('efun-pass');
+  if(passEl){passEl.type='password';passEl.value=f.password||'';}
+  var eye=document.getElementById('efun-pass-eye');if(eye)eye.innerHTML='<i class="ti ti-eye"></i>';
+  var st=document.getElementById('efun-pass-status');
+  if(st){
+    if(f.password&&f.password!==''){st.style.color='#639922';st.innerHTML='<i class="ti ti-check"></i> Tiene contraseña configurada';}
+    else{st.style.color='#B45309';st.innerHTML='<i class="ti ti-alert-triangle"></i> Sin contraseña — no podrá entrar al campo hasta que le pongas una';}
+  }
   document.getElementById('mefun').style.display='flex';
+}
+function toggleFunPassVis(){
+  var el=document.getElementById('efun-pass');var eye=document.getElementById('efun-pass-eye');if(!el)return;
+  if(el.type==='password'){el.type='text';if(eye)eye.innerHTML='<i class="ti ti-eye-off"></i>';}
+  else{el.type='password';if(eye)eye.innerHTML='<i class="ti ti-eye"></i>';}
 }
 function saveEditFun(){
   var f=funcionarios.find(function(x){return x.id===_editFunId;});if(!f)return;
@@ -4714,7 +4728,13 @@ _mutatingFns.forEach(name => {
   <h2>Editar funcionario</h2>
   <div class="fr"><label>Nombre completo</label><input type="text" id="efun-nombre"></div>
   <div class="fr"><label>Usuario para login</label><input type="text" id="efun-user" placeholder="Ej: jorge" autocapitalize="none"></div>
-  <div class="fr"><label>Contraseña (dejar vacío para no cambiar)</label><input type="password" id="efun-pass" placeholder="Nueva contraseña"></div>
+  <div class="fr"><label>Contraseña</label>
+    <div style="display:flex;gap:6px;align-items:center">
+      <input type="password" id="efun-pass" placeholder="Sin contraseña" style="flex:1">
+      <button type="button" class="btn sm" onclick="toggleFunPassVis()" id="efun-pass-eye" title="Mostrar/ocultar"><i class="ti ti-eye"></i></button>
+    </div>
+    <div id="efun-pass-status" style="font-size:11px;margin-top:4px"></div>
+  </div>
   <div class="fr"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="efun-encargado" style="width:16px;height:16px;accent-color:var(--blue)"> <span>👔 Encargado (ve y asigna todas las tareas de sus clientes)</span></label></div>
   <div class="fr"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="efun-exclusivo" style="width:16px;height:16px;accent-color:var(--blue)"> <span>🔒 Exclusivo de sus clientes (no aparece en tareas de otros clientes ni máquinas generales)</span></label></div>
   <div class="ma"><button onclick="CM3('mefun')">Cancelar</button><button class="bp" onclick="saveEditFun()">Guardar</button></div>
