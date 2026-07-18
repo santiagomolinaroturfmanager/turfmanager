@@ -435,8 +435,16 @@ async function sha256(str){
   var buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
 }
+function looksHashed(s){return typeof s==='string'&&/^[a-f0-9]{64}$/.test(s);}
+async function passMatch(stored,entered){
+  if(!stored)return false;
+  if(looksHashed(stored))return (await sha256(entered))===stored;
+  return stored===entered;
+}
 async function doLogin(){
   var input=document.getElementById('login-input').value.trim().toLowerCase().replace(/\s+/g,'');
+  var passEl=document.getElementById('login-pass');
+  var pass=passEl?passEl.value:'';
   var errEl=document.getElementById('no-funs');
   if(!input){errEl.textContent='Ingresá tu usuario';errEl.style.display='block';return;}
   errEl.style.display='none';
@@ -459,13 +467,11 @@ async function doLogin(){
   if(!f){errEl.textContent='Usuario no encontrado. Verificá con el admin.';errEl.style.display='block';return;}
   // Seguridad: exige contraseña SIEMPRE. Sin contraseña configurada NO se entra
   // (antes se salteaba el chequeo y entraba cualquiera).
-  var passEl=document.getElementById('login-pass');
-  var pass=passEl?passEl.value:'';
   if(!f.password||f.password===''){
     errEl.textContent='Tu usuario no tiene contraseña configurada. Pedile al admin que te asigne una.';
     errEl.style.display='block';return;
   }
-  if(pass!==f.password){
+  if(!(await passMatch(f.password,pass))){
     errEl.textContent='Contraseña incorrecta.';errEl.style.display='block';return;
   }
   enterApp(f.nombre);
