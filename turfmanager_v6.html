@@ -248,6 +248,7 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
 <div class="topbar">
   <div class="logo"><i class="ti ti-leaf"></i>TurfManager</div>
     <span id="sync-indicator" style="font-size:10px;color:#639922;margin-left:4px">● Sincronizado</span>
+    <span id="app-version" style="font-size:9px;color:var(--tx3);margin-left:6px" title="Versión de la app">v2026.07.20-a</span>
   <div class="nav">
     <button class="on" onclick="ST('semana')">📅 Semana</button>
     <button onclick="ST('nov')">🔔 Novedades <span id="nb" style="display:none;background:#E24B4A;color:#fff;border-radius:9px;padding:0 5px;font-size:9px;margin-left:2px"></span></button>
@@ -3201,6 +3202,9 @@ function SVT(){
   if(ncanchasRecEl&&!recEditIdCheck){isRec=ncanchasRecEl.checked;}
   var _cids=ncliSel();
   var _targets=ncanSel();  // [{cli,can}]
+  // Red de seguridad: quitar canchas repetidas (mismo cliente+cancha) para que NUNCA
+  // se creen varias tareas en la misma cancha por una rareza de selección.
+  var _seenT={};_targets=_targets.filter(function(g){var k=g.cli+'|'+g.can;if(_seenT[k])return false;_seenT[k]=true;return true;});
   if(!_cids.length){alert('Selecciona al menos un cliente');return;}
   if(!_targets.length){alert('Selecciona al menos una cancha');return;}
   var cid=_cids[0];
@@ -3545,16 +3549,19 @@ function DEL(){
   } else {
     if(!confirm('¿Eliminar esta tarea'+(t.est==='completada'?' (ya completada)':'')+'? Esta acción no se puede deshacer.'))return;
     var delId=selId;
-    tasks=tasks.filter(function(x){return x.id!==delId;});
-    CM3('mdet');render();
-    // Delete directly from Supabase — don't wait for full syncTable
+    // Borrar en Supabase PRIMERO y esperar. Si falla, no la sacamos de la vista y avisamos.
     fetch(SB_URL+'/rest/v1/tareas?id=eq.'+delId,{
       method:'DELETE',
       headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
     }).then(function(r){
-      if(!r.ok)console.warn('Error eliminando tarea de Supabase');
-    }).catch(function(e){console.warn('Error eliminando tarea',e);});
-    saveStateLocal();
+      if(!r.ok){alert('No se pudo eliminar la tarea (la base respondió con error '+r.status+'). Intentá de nuevo.');return;}
+      // Éxito: recién ahora la sacamos localmente
+      tasks=tasks.filter(function(x){return x.id!==delId;});
+      CM3('mdet');render();saveStateLocal();
+    }).catch(function(e){
+      console.warn('Error eliminando tarea',e);
+      alert('No se pudo eliminar la tarea: problema de conexión con la base. La tarea sigue ahí; probá de nuevo en unos segundos.');
+    });
   }
 }
 async function delRecTaskDiaSemana(){
