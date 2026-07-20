@@ -895,6 +895,7 @@ function nUCmaq2(){
   var isVehiculo=mainObj&&(mainObj.cat==='vehiculo');
   if(row)row.style.display=isVehiculo?'':'none';
   if(!isVehiculo)return;
+  var prevMaq2=sel?sel.value:'';
   sel.innerHTML='<option value="">Sin accesorio</option>';
   maquinas.filter(function(m){
     return m.cat==='accesorio'
@@ -906,6 +907,14 @@ function nUCmaq2(){
     o.textContent=m.nombre+(m.marca?' ('+m.marca+')':'');
     sel.appendChild(o);
   });
+  if(prevMaq2){
+    var f2=sel.querySelector('option[value="'+prevMaq2.replace(/"/g,'&quot;')+'"]');
+    if(!f2){ // el accesorio elegido no está en la lista filtrada → lo agregamos para no perderlo
+      var ao=maquinas.find(function(m){return m.nombre===prevMaq2;});
+      var o2=document.createElement('option');o2.value=prevMaq2;o2.textContent=prevMaq2+(ao&&ao.marca?' ('+ao.marca+')':'');sel.appendChild(o2);
+    }
+    sel.value=prevMaq2;
+  }
 }
 function getSelFuns(){
   return Array.from(document.querySelectorAll('#nfun-checks input:checked')).map(function(x){return x.value;});
@@ -1085,7 +1094,14 @@ function nUCcan(){
     o.value=m.nombre;o.textContent=m.nombre+catTag+(m.scope==='cliente'&&m.cliId?' ('+cN(m.cliId)+')':'')+' ('+(+m.hs||0).toFixed(1)+'hs)';
     nm2.appendChild(o);
   });
-  if(prevMaq){var fm=nm2.querySelector('option[value="'+prevMaq.replace(/"/g,'&quot;')+'"]');if(fm)nm2.value=prevMaq;}
+  if(prevMaq){
+    var fm=nm2.querySelector('option[value="'+prevMaq.replace(/"/g,'&quot;')+'"]');
+    if(!fm){ // la máquina elegida no está en la lista filtrada → la agregamos para no perderla
+      var mo=maquinas.find(function(m){return m.nombre===prevMaq;});
+      var oo=document.createElement('option');oo.value=prevMaq;oo.textContent=prevMaq+(mo&&mo.cat==='vehiculo'?' 🚜':'')+(mo?' ('+(+mo.hs||0).toFixed(1)+'hs)':'');nm2.appendChild(oo);
+    }
+    nm2.value=prevMaq;
+  }
   nUCmaq2();
   var wrap=document.getElementById('nfun-checks');
   if(wrap){
