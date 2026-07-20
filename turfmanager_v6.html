@@ -4271,13 +4271,16 @@ var sbPendingSync = false;
 
 // Traduce un error técnico a un motivo entendible para el usuario.
 function sbMotivo(e){
-  if(!navigator.onLine)return{txt:'○ Sin internet',det:'Tu dispositivo no tiene conexión a internet.'};
-  if(!e)return{txt:'○ Sin conexion',det:'No se pudo contactar la base de datos.'};
-  var m=(e&&e.message?e.message:String(e));
+  var m=(e&&e.message?e.message:(e?String(e):''));
+  // Primero clasificamos por el error REAL (no confiamos en navigator.onLine, que da falsos offline)
   if(/401|invalid api key|jwt|apikey/i.test(m))return{txt:'○ Error de autenticación',det:'La clave de acceso a la base de datos no es válida o fue cambiada.'};
   if(/403|permission|rls|policy/i.test(m))return{txt:'○ Acceso denegado',det:'La base rechazó el permiso (403). Revisar políticas del proyecto.'};
-  if(/failed to fetch|networkerror|load failed|timeout|timed out/i.test(m))return{txt:'○ Base de datos no responde',det:'Internet funciona, pero Supabase no responde (puede estar pausado o con un incidente). Ver status.supabase.com'};
   if(/5\d\d/.test(m))return{txt:'○ Base de datos con errores',det:'La base respondió con un error del servidor. Puede ser un incidente de Supabase.'};
+  if(/failed to fetch|networkerror|load failed|timeout|timed out/i.test(m))return !navigator.onLine
+      ?{txt:'○ Sin internet',det:'Tu dispositivo parece sin conexión. Si tenés internet, puede ser un bloqueo de red o que Supabase no responde.'}
+      :{txt:'○ Base de datos no responde',det:'Internet funciona, pero Supabase no responde (puede estar pausado o con un incidente). Ver status.supabase.com'};
+  if(!navigator.onLine)return{txt:'○ Sin internet',det:'Tu dispositivo parece sin conexión (esto puede ser un falso aviso del navegador).'};
+  if(!e)return{txt:'○ Sin conexion',det:'No se pudo contactar la base de datos.'};
   return{txt:'○ Sin conexion',det:m.slice(0,300)};
 }
 function setSBStatus(online,err){
@@ -4583,14 +4586,12 @@ render();
 rebuildSelects();
 function init(){
 UNB();updateAlrBadge();
-if(navigator.onLine){
-  loadFromSupabase().then(async function(ok){
-    fetchCarrascoRain();
-    if(ok){await dedupeTasks();GRT();render();rebuildSelects();UNB();updateAlrBadge();checkMaqAlertas();}
-  });
-} else {
-  setSBStatus(false);
-}
+// Siempre intentamos cargar. navigator.onLine es poco confiable (da falsos "offline"),
+// así que NO bloqueamos la carga por él: si el pedido real falla, ahí sí mostramos el motivo.
+loadFromSupabase().then(async function(ok){
+  fetchCarrascoRain();
+  if(ok){await dedupeTasks();GRT();render();rebuildSelects();UNB();updateAlrBadge();checkMaqAlertas();}
+}).catch(function(e){setSBStatus(false,e);});
 UNB();
 }
 // Auth

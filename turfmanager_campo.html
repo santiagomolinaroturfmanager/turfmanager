@@ -364,13 +364,15 @@ function saveCampoCache(){
   catch(e){}}
 // Traduce un error técnico a un motivo entendible para el usuario.
 function sbMotivoCampo(e){
-  if(!navigator.onLine)return'Sin internet. Revisá tu conexión (wifi o datos).';
-  if(!e)return'No se pudo contactar la base de datos.';
-  var m=(e&&e.message?e.message:String(e));
+  var m=(e&&e.message?e.message:(e?String(e):''));
   if(/401|invalid api key|jwt|apikey/i.test(m))return'Error de autenticación: la clave de acceso no es válida. Avisá al administrador.';
   if(/403|permission|rls|policy/i.test(m))return'Acceso denegado por la base de datos. Avisá al administrador.';
-  if(/failed to fetch|networkerror|load failed|timeout|timed out/i.test(m))return'La base de datos no responde. Tenés internet, pero el servidor no contesta. Probá de nuevo en unos minutos.';
   if(/5\d\d/.test(m))return'La base de datos está con errores. Probá de nuevo en unos minutos.';
+  if(/failed to fetch|networkerror|load failed|timeout|timed out/i.test(m))return navigator.onLine
+    ?'La base de datos no responde. Tenés internet, pero el servidor no contesta. Probá de nuevo en unos minutos.'
+    :'Parece que no tenés internet (o el navegador lo reporta mal). Revisá tu conexión y probá de nuevo.';
+  if(!navigator.onLine)return'Parece que no tenés internet. Revisá tu conexión y probá de nuevo.';
+  if(!e)return'No se pudo contactar la base de datos.';
   return'No se pudo conectar con la base de datos.';
 }
 async function loadData(){
