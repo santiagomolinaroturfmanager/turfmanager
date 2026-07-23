@@ -330,10 +330,9 @@ function taskForFun(t,funName){
     if(!t.cli&&funs.indexOf(funName)>=0)return true; // machine task w/o client assigned to encargado
     return false;
   }
-  // Regular funcionario: assigned to them, OR unassigned and works for that client
-  if(funs.length)return funs.indexOf(funName)>=0;
-  if(!fo||!fo.clientes)return false;
-  return fo.clientes.indexOf(t.cli)>=0;
+  // Funcionario NO encargado: SOLO las tareas asignadas explícitamente a él.
+  // (Ya no ve las tareas sin asignar de sus clientes.)
+  return funs.indexOf(funName)>=0;
 }
 function cN(id){var c=clientes.find(function(x){return x.id===id;});return c?c.nombre:'';}
 function cBG(id){var c=clientes.find(function(x){return x.id===id;});return c?c.bg:'#ccc';}
@@ -1077,8 +1076,17 @@ function elimTareaCampo(id){
     saveTaskCampo(t);
   } else {
     if(!confirm('¿Eliminar esta tarea?\n'+t.tar+' · '+cN(t.cli)+' · '+t.can+'\nEsta acción no se puede deshacer.'))return;
-    tasks=tasks.filter(function(x){return x.id!==id;});
-    fetch(SB_URL+'/rest/v1/tareas?id=eq.'+id,{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).catch(function(e){console.warn('elimTareaCampo',e);});
+    fetch(SB_URL+'/rest/v1/tareas?id=eq.'+id,{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).then(function(r){
+      if(!r.ok){alert('No se pudo eliminar (error '+r.status+'). Intentá de nuevo.');return;}
+      tasks=tasks.filter(function(x){return x.id!==id;});
+      openCards[id]=false;
+      showSaveStatus('✓ Tarea eliminada',true);setTimeout(hideSaveStatus,2500);
+      render();
+    }).catch(function(e){
+      console.warn('elimTareaCampo',e);
+      alert('No se pudo eliminar: problema de conexión. La tarea sigue ahí; probá de nuevo.');
+    });
+    return;
   }
   openCards[id]=false;
   showSaveStatus('✓ Tarea eliminada',true);
