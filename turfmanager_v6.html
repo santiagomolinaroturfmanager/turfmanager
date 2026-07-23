@@ -396,6 +396,7 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
   </div>
   <div id="tab-maq" style="display:none">
     <div class="sec-head"><h2><i class="ti ti-engine" style="vertical-align:-2px;margin-right:4px"></i>Maquinaria</h2><button class="btn primary" onclick="openMaqModal()"><i class="ti ti-plus"></i> Nueva máquina</button></div>
+    <div id="maq-controls"></div>
     <div id="maq-grid" class="maq-grid"></div>
   </div>
   <div id="tab-alr" style="display:none">
@@ -2992,6 +2993,42 @@ function renderResumen(){
 // ================================================================
 // MAQUINARIA
 // ================================================================
+var _maqFiltroMaq=[];  // ids de máquinas a mostrar (vacío = todas)
+var _maqEstados={vencido:true,proximo:true,aldia:true,sinreg:true};
+var _maqOrden='urgente';
+var _maqExpand={};     // historial expandido por máquina
+function maqRowSync(m){return{id:m.id,nombre:m.nombre,tipo:m.tipo,marca:m.marca||'',cat:m.cat||'general',scope:m.scope,cli_id:m.cliId||null,hs:m.hs,intervalo:m.intervalo,proximo:m.proximo,tareas:m.tareas,svc_tareas:m.svcTareas||[],hist:m.hist||[]};}
+function regServiceItem(maqId,svcNombre){
+  var m=maquinas.find(function(x){return x.id===maqId;});if(!m)return;
+  var sv=(m.svcTareas||[]).find(function(s){return (typeof s==='string'?s:s.nombre)===svcNombre;});
+  if(!sv||typeof sv==='string')return;
+  if(!confirm('¿Registrar "'+svcNombre+'" hecho ahora en '+m.nombre+', a las '+(+m.hs||0).toFixed(1)+' hs?'))return;
+  sv.ultimaHs=m.hs;
+  m.hist=m.hist||[];m.hist.push({fec:fD(new Date()),hs:m.hs,desc:svcNombre,tipo:'service'});
+  sbUpsert('maquinas',[maqRowSync(m)]).catch(function(e){console.warn('regServiceItem',e);});
+  saveState();checkMaqAlertas();renderMaq();
+}
+function maqToggleFiltroMaq(id){
+  if(id==='__all__'){_maqFiltroMaq=[];renderMaq();return;}
+  var i=_maqFiltroMaq.indexOf(id);if(i>=0)_maqFiltroMaq.splice(i,1);else _maqFiltroMaq.push(id);
+  renderMaq();
+}
+function maqToggleEstado(e){_maqEstados[e]=!_maqEstados[e];renderMaq();}
+function maqSetOrden(v){_maqOrden=v;renderMaq();}
+function maqToggleExpand(id){_maqExpand[id]=!_maqExpand[id];renderMaq();}
+function maqServicios(m){
+  var svc=(m.svcTareas&&m.svcTareas.length)?m.svcTareas:[];
+  if(svc.length&&typeof svc[0]==='string')svc=svc.map(function(t){return{nombre:t,intervalo:null,ultimaHs:null};});
+  return svc.filter(function(sv){return sv.intervalo;}).map(function(sv){
+    var tieneReg=(sv.ultimaHs!==null&&sv.ultimaHs!==undefined);
+    var usado=tieneReg?Math.max(0,m.hs-sv.ultimaHs):null;
+    var pct=tieneReg?(usado/sv.intervalo):null;
+    var estado=!tieneReg?'sinreg':(pct>=1?'vencido':pct>=0.8?'proximo':'aldia');
+    var fec='';
+    if(tieneReg&&m.hist&&m.hist.length){for(var i=m.hist.length-1;i>=0;i--){if(m.hist[i].desc===sv.nombre){fec=m.hist[i].fec;break;}}}
+    return{nombre:sv.nombre,intervalo:sv.intervalo,ultimaHs:sv.ultimaHs,usado:usado,pct:pct,estado:estado,fec:fec};
+  });
+}
 function renderMaq(){
   let h='';
   maquinas.forEach(m=>{
@@ -3618,16 +3655,23 @@ async function delRecTaskDiaSemana(){
   }));
   CM3('mrec-del-task');CM3('mdet');saveState();renderRec();render();
 }
-function delRecTaskSolo(){
+async function delRecTaskSolo(){
   var modal=document.getElementById('mrec-del-task');
   var tid=parseInt(modal.dataset.tid);
   modal.dataset.tid='';
   var t=tasks.find(function(x){return x.id===tid;});
   if(t){
-    // Mark as cancelada so GRT doesn't regenerate this date
-    t.est='cancelada';
+    var prevEst=t.est, prevRec=t.recId;
+    t.est='cancelada';   // así GRT no la regenera
     t.recId=null;
-    saveTaskToSupabase(t);
+    try{
+      await sbUpsert('tareas',[taskRow(t)]);   // esperar confirmación real de Supabase
+    }catch(e){
+      t.est=prevEst;t.recId=prevRec;           // revertir si no se guardó
+      console.warn('delRecTaskSolo',e);
+      alert('No se pudo eliminar la tarea: problema de conexión con la base. La tarea sigue ahí; probá de nuevo en unos segundos.');
+      return;
+    }
   }
   CM3('mrec-del-task');CM3('mdet');saveState();render();
 }
@@ -4142,41 +4186,65 @@ function editMaqHoras(id){
   },50);
 }
 function renderMaq(){
+  var cont=document.getElementById('maq-grid');if(!cont)return;
+  cont.style.cssText='display:flex;flex-direction:column;gap:12px';
+  renderMaqControls();
+  function worst(m){var w=0;maqServicios(m).forEach(function(sv){if(sv.pct!=null)w=Math.max(w,sv.pct);});return w;}
+  var lista=maquinas.filter(function(m){return !_maqFiltroMaq.length||_maqFiltroMaq.indexOf(m.id)>=0;});
+  if(_maqOrden==='alfabetico')lista.sort(function(a,b){return a.nombre.localeCompare(b.nombre);});
+  else lista.sort(function(a,b){return worst(b)-worst(a);});
   var h='';
-  maquinas.forEach(function(m){
-    var mHist=m.hist||[];var mHs=+m.hs||0,mProx=+m.proximo||0;
-    var lastSvcHs=null;mHist.filter(function(e){return e.tipo==='service';}).forEach(function(e){if(lastSvcHs===null||(+e.hs||0)>lastSvcHs)lastSvcHs=+e.hs||0;});
-    if(lastSvcHs===null)lastSvcHs=Math.max(0,mHs-(+m.intervalo||250));
-    var span=mProx-lastSvcHs,done2=mHs-lastSvcHs;
-    var pct=span>0?Math.min(100,Math.max(0,Math.round((done2/span)*100))):0;
-    var restante=Math.max(0,mProx-mHs);
-    var nivel=restante<=0?'crit':restante<=20?'warn':'ok';
-    var badgeTxt=nivel==='crit'?'Service urgente':nivel==='warn'?'Proximo service (menos 20hs)':'Al dia';
+  lista.forEach(function(m){
+    var servicios=maqServicios(m);
+    var visibles=servicios.filter(function(sv){return _maqEstados[sv.estado];});
+    if(servicios.length&&!visibles.length)return; // no matchea el filtro de estado
+    var mHs=+m.hs||0, w=worst(m);
+    var nivel=w>=1?'crit':w>=0.8?'warn':'ok';
+    var badgeTxt=nivel==='crit'?'Service vencido':nivel==='warn'?'Service proximo':'Al dia';
     var badgeCls=nivel==='crit'?'badge-crit':nivel==='warn'?'badge-warn':'badge-ok';
     var scopeLbl=m.scope==='cliente'?'<span class="maq-tag">'+cN(m.cliId)+'</span>':'<span class="maq-tag">General</span>';
-    var catLbl=m.cat==='vehiculo'?'<span class="maq-tag" style="background:#E8F1FB;color:#0C447C">🚜 Vehiculo</span>':m.cat==='accesorio'?'<span class="maq-tag" style="background:#F3EAF8;color:#6A1B8A">🔧 Accesorio</span>':'';
-    var tarTags=(m.tareas||[]).map(function(t){return'<span class="maq-tag">'+t+'</span>';}).join('');
-    var years={};mHist.forEach(function(e){if(e.fec)years[e.fec.split('-')[0]]=true;});
-    var histRows=mHist.slice().reverse().map(_maqHistRow).join('');
-    var filterOpts='<option value="">Todo el historial</option>';
-    var MES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-    Object.keys(years).sort().reverse().forEach(function(y){filterOpts+='<option value="'+y+'">'+y+'</option>';['01','02','03','04','05','06','07','08','09','10','11','12'].forEach(function(mm){if(mHist.some(function(e){return e.fec&&e.fec.startsWith(y+'-'+mm);}))filterOpts+='<option value="'+y+'-'+mm+'">'+MES[parseInt(mm)-1]+' '+y+'</option>';});});
+    var mHist=m.hist||[];
     h+='<div class="maq-card">';
-    h+='<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:2px"><div><div style="font-size:14px;font-weight:500">'+m.nombre+'</div><div style="font-size:11px;color:var(--tx2);margin-bottom:8px">'+m.tipo+(m.marca?' - '+m.marca:'')+'</div></div>';
-    h+='<button class="btn danger sm" onclick="delMaq('+m.id+')"><i class="ti ti-trash"></i></button></div>';
-    h+='<div style="margin-bottom:10px">'+scopeLbl+catLbl+tarTags+'</div>';
-    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px"><span style="font-size:11px;color:var(--tx2)">Horas de uso</span><strong>'+mHs.toFixed(1)+' hs</strong></div>';
-    h+='<div class="maq-bar-wrap"><div class="maq-bar '+nivel+'" style="width:'+pct+'%"></div></div>';
-    h+='<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">Desde ultimo service: '+lastSvcHs.toFixed(1)+'hs | Proximo: '+mProx.toFixed(1)+'hs | Faltan: '+restante.toFixed(1)+'hs</div>';
-    h+='<div style="margin-bottom:10px"><span class="'+badgeCls+'">'+badgeTxt+'</span></div>';
-    h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"><button class="btn sm" onclick="regHoras('+m.id+')"><i class="ti ti-pencil"></i> Corregir hs</button><button class="btn sm" onclick="editMaqHoras('+m.id+')"><i class="ti ti-settings"></i> Editar</button><button class="btn sm" onclick="regService('+m.id+')"><i class="ti ti-tool"></i> Service</button></div>';
-    h+='<div><button class="btn sm" onclick="toggleMaqHist('+m.id+',this)" style="margin-bottom:8px"><i class="ti ti-chevron-down"></i> Ver historial ('+mHist.length+' entradas)</button>';
-    h+='<div id="maq-hist-'+m.id+'" style="display:none"><div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap"><select onchange="filterMaqHist('+m.id+',this.value)" id="maq-hist-filter-'+m.id+'" style="font-size:11px;padding:2px 6px;border:0.5px solid var(--bo2);border-radius:var(--br);background:var(--bg2);color:var(--tx);font-family:inherit">'+filterOpts+'</select>';
-    h+='<button class="btn sm" onclick="exportMaqHist('+m.id+')"><i class="ti ti-file-spreadsheet"></i> Excel</button></div>';
-    h+='<div id="maq-hist-rows-'+m.id+'">'+histRows+'</div></div></div></div>';
+    h+='<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px"><div><div style="font-size:15px;font-weight:600">'+m.nombre+'</div><div style="font-size:11px;color:var(--tx2);margin-top:1px">'+m.tipo+(m.marca?' · '+m.marca:'')+' · '+scopeLbl+'</div></div><div style="text-align:right"><div style="font-size:14px;font-weight:600">'+mHs.toFixed(1)+' hs</div><span class="'+badgeCls+'" style="font-size:10px">'+badgeTxt+'</span></div></div>';
+    if(!servicios.length){
+      h+='<div style="font-size:11px;color:var(--tx3);padding:4px 0 8px">Sin service con intervalo configurado.</div>';
+    } else {
+      visibles.forEach(function(sv){
+        var safeNom=sv.nombre.replace(/'/g,"\\'");
+        if(sv.estado==='sinreg'){
+          h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-top:0.5px solid var(--bo)"><div style="font-size:12px"><b>'+sv.nombre+'</b><div style="font-size:10px;color:var(--tx3)">cada '+sv.intervalo+' hs · nunca registrado</div></div><button class="btn sm" onclick="regServiceItem('+m.id+',\''+safeNom+'\')">Registrar</button></div>';
+          return;
+        }
+        var pctShow=Math.min(100,Math.round(sv.pct*100));
+        var restante=sv.intervalo-sv.usado;
+        var niv=sv.estado==='vencido'?'crit':sv.estado==='proximo'?'warn':'ok';
+        var infoRest=restante>=0?('faltan '+Math.round(restante)+' hs'):('<b style="color:#E24B4A">vencido hace '+Math.round(-restante)+' hs</b>');
+        h+='<div style="padding:9px 0;border-top:0.5px solid var(--bo)">'
+          +'<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px"><span style="font-size:12px;font-weight:600">'+sv.nombre+'</span><button class="btn sm" onclick="regServiceItem('+m.id+',\''+safeNom+'\')" title="Registrar que se hizo ahora">Hecho</button></div>'
+          +'<div class="maq-bar-wrap"><div class="maq-bar '+niv+'" style="width:'+pctShow+'%"></div></div>'
+          +'<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--tx3);margin-top:3px;gap:8px;flex-wrap:wrap"><span>usó '+Math.round(sv.usado)+' / '+sv.intervalo+' hs · '+infoRest+'</span><span>último: hace '+Math.round(sv.usado)+' hs'+(sv.fec?' · '+sv.fec:'')+'</span></div></div>';
+      });
+    }
+    h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"><button class="btn sm" onclick="regHoras('+m.id+')"><i class="ti ti-pencil"></i> Corregir hs</button><button class="btn sm" onclick="editMaqHoras('+m.id+')"><i class="ti ti-settings"></i> Editar</button><button class="btn sm" onclick="toggleMaqHist('+m.id+',this)"><i class="ti ti-history"></i> Historial ('+mHist.length+')</button><button class="btn danger sm" onclick="delMaq('+m.id+')"><i class="ti ti-trash"></i></button></div>';
+    var histRows=mHist.slice().reverse().map(_maqHistRow).join('');
+    h+='<div id="maq-hist-'+m.id+'" style="display:none;margin-top:8px"><div id="maq-hist-rows-'+m.id+'">'+(histRows||'<div style="font-size:11px;color:var(--tx3)">Sin historial</div>')+'</div></div>';
+    h+='</div>';
   });
-  h+='<div class="maq-add-card" onclick="openMaqModal()"><i class="ti ti-plus" style="font-size:18px"></i> Agregar maquina</div>';
-  document.getElementById('maq-grid').innerHTML=h;
+  cont.innerHTML=h||'<div class="empty">No hay maquinas con esos filtros.</div>';
+}
+function renderMaqControls(){
+  var el=document.getElementById('maq-controls');if(!el)return;
+  var chip=function(label,active,fn){return '<button onclick="'+fn+'" class="alrf-btn'+(active?' on':'')+'">'+label+'</button>';};
+  var h='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><span style="font-size:11px;color:var(--tx2)">Maquina:</span>';
+  h+=chip('Todas',_maqFiltroMaq.length===0,"maqToggleFiltroMaq('__all__')");
+  maquinas.forEach(function(m){h+=chip(m.nombre,_maqFiltroMaq.indexOf(m.id)>=0,'maqToggleFiltroMaq('+m.id+')');});
+  h+='</div><div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:14px"><div style="display:flex;gap:6px;align-items:center"><span style="font-size:11px;color:var(--tx2)">Estado:</span>';
+  h+=chip('Vencidos',_maqEstados.vencido,"maqToggleEstado('vencido')");
+  h+=chip('Proximos',_maqEstados.proximo,"maqToggleEstado('proximo')");
+  h+=chip('Al dia',_maqEstados.aldia,"maqToggleEstado('aldia')");
+  h+=chip('Sin registrar',_maqEstados.sinreg,"maqToggleEstado('sinreg')");
+  h+='</div><div style="display:flex;gap:6px;align-items:center"><span style="font-size:11px;color:var(--tx2)">Ordenar:</span><select onchange="maqSetOrden(this.value)" style="font-size:12px;padding:4px 8px"><option value="urgente"'+(_maqOrden==='urgente'?' selected':'')+'>Mas urgente</option><option value="alfabetico"'+(_maqOrden==='alfabetico'?' selected':'')+'>Alfabetico</option></select></div></div>';
+  el.innerHTML=h;
 }
 function openMaqModal(){document.getElementById('mmaq').dataset.editId='';document.querySelector('#mmaq h2').textContent='Registrar maquina';var el=document.getElementById('maq-name');if(el)el.value='';var elHs=document.getElementById('maq-hs');if(elHs)elHs.value='';var elInt=document.getElementById('maq-int');if(elInt)elInt.value='250';var elNxt=document.getElementById('maq-next');if(elNxt)elNxt.value='250';var cr=document.getElementById('maq-cli-row');if(cr)cr.style.display='none';var sc=document.getElementById('maq-scope');if(sc)sc.value='general';var mk=document.getElementById('mq-marca');if(mk)mk.value='';document.querySelectorAll('#maq-tasks-check input').forEach(function(x){x.checked=false;});document.getElementById('mmaq').style.display='flex';}
 function ddr(e){
