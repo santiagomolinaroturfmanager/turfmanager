@@ -248,7 +248,7 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
 <div class="topbar">
   <div class="logo"><i class="ti ti-leaf"></i>TurfManager</div>
     <span id="sync-indicator" style="font-size:10px;color:#639922;margin-left:4px">● Sincronizado</span>
-    <span id="app-version" style="font-size:9px;color:var(--tx3);margin-left:6px" title="Versión de la app">v2026.07.20-a</span>
+    <span id="app-version" style="font-size:9px;color:var(--tx3);margin-left:6px" title="Versión de la app">v2026.07.27-b</span>
   <div class="nav">
     <button class="on" onclick="ST('semana')">📅 Semana</button>
     <button onclick="ST('nov')">🔔 Novedades <span id="nb" style="display:none;background:#E24B4A;color:#fff;border-radius:9px;padding:0 5px;font-size:9px;margin-left:2px"></span></button>
@@ -3336,6 +3336,9 @@ function SVT(){
     var horaBase=parseInt((base.des||'08:00').split(':')[0])||8;
     var contadorCli={};
     var nuevas=[];
+    console.log('[TurfManager v2026.07.27-b] creando multi →', JSON.stringify(_targets));
+    // Refuerzo final: garantizar canchas únicas por cliente justo antes de crear
+    var _vst={};_targets=_targets.filter(function(g){var k=g.cli+'|'+g.can;if(_vst[k])return false;_vst[k]=true;return true;});
     _targets.forEach(function(g){
       var i=contadorCli[g.cli]||0;contadorCli[g.cli]=i+1;
       var h1=horaBase+i*dur, h2=Math.min(23,h1+dur);
