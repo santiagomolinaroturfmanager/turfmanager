@@ -4682,9 +4682,22 @@ UNB();updateAlrBadge();
 loadFromSupabase().then(async function(ok){
   fetchCarrascoRain();
   if(ok){await dedupeTasks();GRT();render();rebuildSelects();UNB();updateAlrBadge();checkMaqAlertas();}
+  _lastReload=Date.now();
 }).catch(function(e){setSBStatus(false,e);});
 UNB();
 }
+// Refresco automático al volver a la pestaña tras un rato (evita trabajar sobre datos viejos)
+var _lastReload=Date.now();
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState!=='visible')return;
+  if(Date.now()-_lastReload<30000)return;                 // recién recargado, no repetir
+  var modalAbierto=[].some.call(document.querySelectorAll('.modal-bg'),function(m){return getComputedStyle(m).display!=='none';});
+  if(modalAbierto)return;                                  // no interrumpir una edición en curso
+  _lastReload=Date.now();
+  loadFromSupabase().then(async function(ok){
+    if(ok){await dedupeTasks();GRT();render();rebuildSelects();UNB();updateAlrBadge();checkMaqAlertas();}
+  }).catch(function(){});
+});
 // Auth
 var ADMIN_HASH='6719e9652e0b0550c867a3a8ce833c50cebc2633583332628a9bf671bb93093c';
 async function sha256(str){

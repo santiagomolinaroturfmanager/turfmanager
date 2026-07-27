@@ -297,6 +297,16 @@ var openCards={};
 
 // ── STATE ─────────────────────────────────────────────────────
 var cFun=null;
+// Refresco automático al volver a la pestaña tras un rato (evita datos viejos "trancados")
+var _lastReloadCampo=Date.now();
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState!=='visible')return;
+  if(Date.now()-_lastReloadCampo<30000)return;
+  var ls=document.getElementById('login-screen');
+  if(ls&&getComputedStyle(ls).display!=='none')return;   // en login, no recargar
+  _lastReloadCampo=Date.now();
+  if(typeof loadData==='function')loadData().catch(function(){});
+});
 var cView='dia';  // 'dia' | 'semana'
 var cMon=monday(new Date());
 var cDay=fD(new Date());
