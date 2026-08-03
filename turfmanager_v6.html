@@ -248,7 +248,7 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
 <div class="topbar">
   <div class="logo"><i class="ti ti-leaf"></i>TurfManager</div>
     <span id="sync-indicator" style="font-size:10px;color:#639922;margin-left:4px">● Sincronizado</span>
-    <span id="app-version" style="font-size:9px;color:var(--tx3);margin-left:6px" title="Versión de la app">v2026.08.03-a</span>
+    <span id="app-version" style="font-size:9px;color:var(--tx3);margin-left:6px" title="Versión de la app">v2026.08.03-b</span>
   <div class="nav">
     <button class="on" onclick="ST('semana')">📅 Semana</button>
     <button onclick="ST('nov')">🔔 Novedades <span id="nb" style="display:none;background:#E24B4A;color:#fff;border-radius:9px;padding:0 5px;font-size:9px;margin-left:2px"></span></button>
@@ -2823,7 +2823,7 @@ function renderConsultaDups(ct){
     var d=new Date(t.fec+'T12:00');
     if(isYear){if(d.getFullYear()!==_conYear)return;}
     else{if(d.getMonth()!==_conMonth||d.getFullYear()!==_conYear)return;}
-    var k=t.cli+'|'+t.can+'|'+t.tar+'|'+t.fec;
+    var k=t.cli+'|'+t.can+'|'+t.tar+'|'+t.fec+(t.tar==='Mant. Maquinaria'?('|'+(t.maq||'')+'|'+(t.maq2||'')):'');
     (groups[k]=groups[k]||[]).push(t);
   });
   var allDupGroups=Object.keys(groups).map(function(k){return groups[k];}).filter(function(g){return g.length>=2;});
@@ -3346,7 +3346,7 @@ function SVT(){
     var horaBase=parseInt((base.des||'08:00').split(':')[0])||8;
     var contadorCli={};
     var nuevas=[];
-    console.log('[TurfManager v2026.08.03-a] creando multi →', JSON.stringify(_targets));
+    console.log('[TurfManager v2026.08.03-b] creando multi →', JSON.stringify(_targets));
     console.log('[TurfManager] canchas de clientes →', JSON.stringify(_cids.map(function(id){var c=clientes.find(function(x){return x.id===id;});return {cli:id,canchas:(c&&c.canchas)||[]};})));
     // Refuerzo final: garantizar canchas únicas por cliente justo antes de crear
     var _vst={};_targets=_targets.filter(function(g){var k=g.cli+'|'+g.can;if(_vst[k])return false;_vst[k]=true;return true;});
@@ -3395,7 +3395,7 @@ async function dedupeTasks(){
     return (a.id||0)-(b.id||0);
   });
   pend.forEach(function(t){
-    var k=(t.recId!=null)?('R'+t.recId+'|'+t.fec):('N'+t.cli+'|'+t.can+'|'+t.tar+'|'+t.fec+'|'+t.des);
+    var k=(t.recId!=null)?('R'+t.recId+'|'+t.fec):('N'+t.cli+'|'+t.can+'|'+t.tar+'|'+t.fec+'|'+t.des+'|'+(t.maq||'')+'|'+(t.maq2||''));
     if(seen[k])toDelete.push(t.id);else seen[k]=true;
   });
   if(!toDelete.length)return 0;
