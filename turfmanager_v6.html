@@ -248,7 +248,7 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
 <div class="topbar">
   <div class="logo"><i class="ti ti-leaf"></i>TurfManager</div>
     <span id="sync-indicator" style="font-size:10px;color:#639922;margin-left:4px">● Sincronizado</span>
-    <span id="app-version" style="font-size:9px;color:var(--tx3);margin-left:6px" title="Versión de la app">v2026.07.27-b</span>
+    <span id="app-version" style="font-size:9px;color:var(--tx3);margin-left:6px" title="Versión de la app">v2026.08.03-a</span>
   <div class="nav">
     <button class="on" onclick="ST('semana')">📅 Semana</button>
     <button onclick="ST('nov')">🔔 Novedades <span id="nb" style="display:none;background:#E24B4A;color:#fff;border-radius:9px;padding:0 5px;font-size:9px;margin-left:2px"></span></button>
@@ -1061,8 +1061,12 @@ function nUC(){
     cids.forEach(function(cid){
       var cli=clientes.find(function(x){return x.id===cid;});if(!cli)return;
       if(cids.length>1){var hd=document.createElement('div');hd.style.cssText='font-size:11px;font-weight:700;color:var(--tx2);margin:6px 0 3px;text-transform:uppercase;letter-spacing:.04em';hd.textContent=cli.nombre;wrap.appendChild(hd);}
+      var _vistas={};
       (cli.canchas||[]).forEach(function(ca){
         var nm=canNombre(ca),tipo=canTipo(ca);
+        var _norm=String(nm).trim().replace(/\s+/g,' ').toLowerCase();
+        if(_vistas[_norm])return;   // no mostrar canchas duplicadas / con espacios raros
+        _vistas[_norm]=true;
         var lbl=document.createElement('label');
         lbl.style.cssText='display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;font-size:13px';
         var ck=prev[cid+'|'+nm]?' checked':'';
@@ -1481,8 +1485,14 @@ function SVTMaquinaria(){
   } else {
     var newTask={id:nextTaskId(),...base,fec:fec,est:'pendiente',obs:obs,recId:null,hsIni:null,hsFin:null,_dirty:true};
     tasks.push(newTask);
-    saveTaskToSupabase(newTask);
-    CM3('mnew');saveState();render();
+    saveState();render();
+    // Guardar esperando confirmación real de Supabase. Si falla, avisar y NO cerrar (para reintentar).
+    sbUpsert('tareas',[taskRow(newTask)]).then(function(){
+      CM3('mnew');
+    }).catch(function(e){
+      console.warn('save maq task error',e);
+      alert('Atención: no se pudo guardar la tarea de maquinaria en la base (problema de conexión). La tarea está en pantalla pero NO quedó guardada. Revisá la conexión y volvé a guardar.');
+    });
   }
   // Reset form
   setNTipo('canchas');
@@ -3257,7 +3267,7 @@ function SVT(){
   var _targets=ncanSel();  // [{cli,can}]
   // Red de seguridad: quitar canchas repetidas (mismo cliente+cancha) para que NUNCA
   // se creen varias tareas en la misma cancha por una rareza de selección.
-  var _seenT={};_targets=_targets.filter(function(g){var k=g.cli+'|'+g.can;if(_seenT[k])return false;_seenT[k]=true;return true;});
+  var _seenT={};_targets=_targets.filter(function(g){var k=g.cli+'|'+String(g.can).trim().replace(/\s+/g,' ').toLowerCase();if(_seenT[k])return false;_seenT[k]=true;return true;});
   if(!_cids.length){alert('Selecciona al menos un cliente');return;}
   if(!_targets.length){alert('Selecciona al menos una cancha');return;}
   var cid=_cids[0];
@@ -3336,7 +3346,8 @@ function SVT(){
     var horaBase=parseInt((base.des||'08:00').split(':')[0])||8;
     var contadorCli={};
     var nuevas=[];
-    console.log('[TurfManager v2026.07.27-b] creando multi →', JSON.stringify(_targets));
+    console.log('[TurfManager v2026.08.03-a] creando multi →', JSON.stringify(_targets));
+    console.log('[TurfManager] canchas de clientes →', JSON.stringify(_cids.map(function(id){var c=clientes.find(function(x){return x.id===id;});return {cli:id,canchas:(c&&c.canchas)||[]};})));
     // Refuerzo final: garantizar canchas únicas por cliente justo antes de crear
     var _vst={};_targets=_targets.filter(function(g){var k=g.cli+'|'+g.can;if(_vst[k])return false;_vst[k]=true;return true;});
     _targets.forEach(function(g){
