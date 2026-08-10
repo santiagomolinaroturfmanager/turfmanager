@@ -248,7 +248,7 @@ select.inline,input.inline{font-size:12px;padding:3px 8px;border:0.5px solid var
 <div class="topbar">
   <div class="logo"><i class="ti ti-leaf"></i>TurfManager</div>
     <span id="sync-indicator" style="font-size:10px;color:#639922;margin-left:4px">● Sincronizado</span>
-    <span id="app-version" style="font-size:9px;color:var(--tx3);margin-left:6px" title="Versión de la app">v2026.08.03-b</span>
+    <span id="app-version" style="font-size:9px;color:var(--tx3);margin-left:6px" title="Versión de la app">v2026.08.03-c</span>
   <div class="nav">
     <button class="on" onclick="ST('semana')">📅 Semana</button>
     <button onclick="ST('nov')">🔔 Novedades <span id="nb" style="display:none;background:#E24B4A;color:#fff;border-radius:9px;padding:0 5px;font-size:9px;margin-left:2px"></span></button>
@@ -3211,6 +3211,9 @@ function ONT(ir,taskId,prefillDate,prefillHour){
     var t=tasks.find(function(x){return x.id===taskId;});if(!t)return;
     nBuildCli([t.cli]);
     nUC(); // arma las canchas del cliente
+    // Edición: partir SIN canchas tildadas (nUC conserva la selección previa del multi-create,
+    // lo que hacía que al guardar tomara la primera cancha —Cancha 1— para todas).
+    document.querySelectorAll('#ncan-multi input').forEach(function(i){i.checked=false;});
     var canInp=document.querySelector('#ncan-multi input[data-cli="'+t.cli+'"][value="'+String(t.can).replace(/"/g,'&quot;')+'"]');
     if(canInp)canInp.checked=true;
     nUCcan(); // repuebla tarea/máquina/funcionarios según esa cancha
@@ -3346,7 +3349,7 @@ function SVT(){
     var horaBase=parseInt((base.des||'08:00').split(':')[0])||8;
     var contadorCli={};
     var nuevas=[];
-    console.log('[TurfManager v2026.08.03-b] creando multi →', JSON.stringify(_targets));
+    console.log('[TurfManager v2026.08.03-c] creando multi →', JSON.stringify(_targets));
     console.log('[TurfManager] canchas de clientes →', JSON.stringify(_cids.map(function(id){var c=clientes.find(function(x){return x.id===id;});return {cli:id,canchas:(c&&c.canchas)||[]};})));
     // Refuerzo final: garantizar canchas únicas por cliente justo antes de crear
     var _vst={};_targets=_targets.filter(function(g){var k=g.cli+'|'+g.can;if(_vst[k])return false;_vst[k]=true;return true;});
