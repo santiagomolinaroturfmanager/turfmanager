@@ -63,6 +63,11 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg3);min-he
 
 /* ── TASK CARD ── */
 .tcard{background:var(--bg);border:0.5px solid var(--bo);border-radius:var(--brl);margin-bottom:12px;overflow:hidden}
+.tcard.mia{border:2px solid var(--blue);box-shadow:0 1px 8px rgba(24,95,165,.18);background:linear-gradient(0deg,var(--bg),#F2F7FC)}
+.tcard.otra{opacity:.72}
+.mia-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:#fff;background:var(--blue);padding:2px 8px;border-radius:20px;margin-top:4px}
+.sep-enc{font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin:6px 2px 8px;display:flex;align-items:center;gap:6px}
+.sep-enc::after{content:"";flex:1;height:0.5px;background:var(--bo)}
 .chip-drag{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:none;cursor:grab;}
 .thead{padding:14px 14px;display:flex;align-items:center;gap:12px;cursor:pointer;user-select:none}
 .thead:active{background:var(--bg2)}
@@ -744,10 +749,27 @@ function renderDia(){
   });
   // Merge tasks and actividades, sort chronologically
   var allItems=[];
-  myTasks.forEach(function(t){allItems.push({type:'task',des:t.des,data:t});});
-  dayActs.forEach(function(a){allItems.push({type:'act',des:a.des.substring(0,5),data:a});});
-  allItems.sort(function(a,b){return a.des.localeCompare(b.des);});
+  myTasks.forEach(function(t){allItems.push({type:'task',des:t.des,data:t,mia:esMiaEnc(t)});});
+  dayActs.forEach(function(a){allItems.push({type:'act',des:a.des.substring(0,5),data:a,mia:false});});
+  var encView=isEncargado&&!isAdmin;
+  if(encView){
+    // Encargado: primero SUS tareas, después el resto; dentro de cada grupo por hora
+    allItems.sort(function(a,b){
+      if(a.mia!==b.mia)return a.mia?-1:1;
+      return a.des.localeCompare(b.des);
+    });
+  } else {
+    allItems.sort(function(a,b){return a.des.localeCompare(b.des);});
+  }
+  var _hayMias=encView&&allItems.some(function(i){return i.mia;});
+  var _hayOtras=encView&&allItems.some(function(i){return !i.mia;});
+  var _sepPuesto={mias:false,otras:false};
   allItems.forEach(function(item){
+    // Separadores visuales para el encargado
+    if(encView&&_hayMias&&_hayOtras){
+      if(item.mia&&!_sepPuesto.mias){h+='<div class="sep-enc"><i class="ti ti-user-check"></i> Mis tareas</div>';_sepPuesto.mias=true;}
+      if(!item.mia&&!_sepPuesto.otras){h+='<div class="sep-enc"><i class="ti ti-users"></i> Otras tareas del cliente</div>';_sepPuesto.otras=true;}
+    }
     if(item.type==='task'){
       h+=renderTaskCard(item.data);
     } else {
@@ -854,9 +876,16 @@ function renderSemana(){
         cell.classList.add('drop-cell');
         cellTasks.forEach(function(t){
           var bg=cBG(t.cli),tx=cTX(t.cli);
+          var mia=esMiaEnc(t);
+          var encView=isEncargado&&!isAdmin;
+          var extra='';
+          if(t.est==='completada')extra=';opacity:.4';
+          else if(encView&&mia)extra=';outline:2px solid #185FA5;box-shadow:0 0 0 1px #185FA5 inset';
+          else if(t.est==='en_curso')extra=';outline:2px solid #185FA5';
+          if(encView&&!mia&&t.est!=='completada')extra+=';opacity:.6';
           var chip=document.createElement('div');
-          chip.style.cssText='background:'+bg+';color:'+tx+';border-radius:4px;padding:3px 5px;margin-bottom:2px;font-size:10px;font-weight:500;line-height:1.3;cursor:pointer;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none'+(t.est==='completada'?';opacity:.4':t.est==='en_curso'?';outline:2px solid #185FA5':'');
-          chip.innerHTML='<div style="font-weight:600;font-size:10px">'+t.tar+'</div>'
+          chip.style.cssText='background:'+bg+';color:'+tx+';border-radius:4px;padding:3px 5px;margin-bottom:2px;font-size:10px;font-weight:500;line-height:1.3;cursor:pointer;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none'+extra;
+          chip.innerHTML='<div style="font-weight:600;font-size:10px">'+(encView&&mia?'★ ':'')+t.tar+'</div>'
             +'<div style="font-size:9px;opacity:.85">'+t.des+' '+((t.tar==='Mant. Maquinaria')?(t.maq||'Maquinaria'):t.can)+'</div>';
           chip.dataset.tid=t.id;
           // Touch drag
@@ -924,8 +953,14 @@ function selectDayAndOpen(ds,id){
 }
 
 // ── TASK CARD ────────────────────────────────────────────────
+function esMiaEnc(t){
+  // Para el encargado: ¿la tarea está asignada a él? (resalta y prioriza)
+  return isEncargado && !isAdmin && tFuns(t).indexOf(cFun)>=0;
+}
 function renderTaskCard(t){
   var bg=cBG(t.cli),tx=cTX(t.cli);
+  var mia=esMiaEnc(t);
+  var cardCls='tcard'+(isEncargado&&!isAdmin?(mia?' mia':' otra'):'');
   var stMap={pendiente:['eb-p','Pendiente'],en_curso:['eb-e','En curso'],completada:['eb-c','Completada']};
   var stInfo=stMap[t.est]||stMap['pendiente'];
   var open=!!openCards[t.id];
@@ -1013,12 +1048,13 @@ function renderTaskCard(t){
     body+='</div>';
   }
 
-  return '<div class="tcard" id="tcard-'+t.id+'">'
+  return '<div class="'+cardCls+'" id="tcard-'+t.id+'">'
     +'<div class="thead" onclick="toggleCard('+t.id+')">'
     +'<div class="tbar" style="background:'+bg+'"></div>'
     +'<div class="tinfo">'
     +'<div class="ttask">'+t.tar+'</div>'
     +'<div class="tsub">'+sub+'</div>'
+    +(mia?'<div class="mia-badge"><i class="ti ti-user-check"></i> Asignada a ti</div>':'')
     +'</div>'
     +'<div style="text-align:right;flex-shrink:0">'
     +'<div class="ttime">'+time+'</div>'
